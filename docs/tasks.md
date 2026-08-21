@@ -14,6 +14,8 @@ Każdy task jest powiązany z wymaganiami z [dokumentu przewodniego](README.md).
 
 ### ARC-01: Utworzyć workspace Rust i bazową konfigurację
 
+**Status:** Complete
+
 **Pokrywa:** FR-01, NFR-03, NFR-04
 
 **Zakres:** workspace Cargo, crate aplikacji, ładowanie konfiguracji TOML, walidacja konfiguracji oraz rozróżnienie danych jawnych i referencji sekretów.

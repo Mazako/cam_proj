@@ -1,0 +1,14 @@
+[app]
+bind_address = "127.0.0.1:8080"
+pre_event_seconds = 10
+post_event_seconds = 20
+rolling_buffer_seconds = 30
+
+[[cameras]]
+id = "front-door"
+name = "Front door"
+rtsp_url_env = "CAMWATCH_FRONT_DOOR_RTSP_URL"
+onvif_url = "http://192.168.1.65:2020/onvif/device_service"
+onvif_credentials_env = "CAMWATCH_FRONT_DOOR_ONVIF_CREDENTIALS"
+motion_min_area = 1000
+yolo_confidence = 0.50
