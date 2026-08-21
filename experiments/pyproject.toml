@@ -7,7 +7,12 @@ authors = [
     { name = "Mazako", email = "michal.maziarz12@gmail.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "numpy>=2.0.0",
+    "onvif-zeep>=0.2.12",
+    "onnxruntime>=1.20.0",
+    "opencv-python>=5.0.0.93",
+]
 
 [project.scripts]
 cam-proj = "cam_proj:main"
