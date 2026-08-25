@@ -1,11 +1,12 @@
-mod config;
-
 use std::path::PathBuf;
 
 use clap::Parser;
 use tracing_subscriber::EnvFilter;
 
-use crate::config::Config;
+use camwatch::{
+    config::{CameraConfig, Config},
+    storage::{Database, NewCamera},
+};
 
 #[derive(Debug, Parser)]
 #[command(name = "camwatch", version, about = "Local network camera monitoring")]
@@ -14,7 +15,8 @@ struct Cli {
     config: PathBuf,
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     init_logging();
 
     let cli = Cli::parse();
@@ -26,11 +28,56 @@ fn main() {
         }
     };
 
+    if !config.app.database_path.exists() && config.cameras.is_empty() {
+        eprintln!("Configuration error: a new database requires at least one camera");
+        std::process::exit(2);
+    }
+
+    let (database, was_created) = match Database::open(&config.app.database_path).await {
+        Ok(database) => database,
+        Err(error) => {
+            eprintln!("Database error: {error}");
+            std::process::exit(3);
+        }
+    };
+
+    if was_created {
+        let cameras = config.cameras.iter().map(new_camera).collect::<Vec<_>>();
+        if let Err(error) = database.seed_cameras(&cameras).await {
+            eprintln!("Database error: {error}");
+            std::process::exit(3);
+        }
+    }
+
+    let camera_count = match database.camera_count().await {
+        Ok(camera_count) => camera_count,
+        Err(error) => {
+            eprintln!("Database error: {error}");
+            std::process::exit(3);
+        }
+    };
+
     tracing::info!(
-        camera_count = config.cameras.len(),
+        database_created = was_created,
+        camera_count,
         bind_address = %config.app.bind_address,
         "configuration loaded"
     );
+}
+
+fn new_camera(camera: &CameraConfig) -> NewCamera {
+    NewCamera {
+        id: camera.id.as_str().to_owned(),
+        name: camera.name.clone(),
+        rtsp_url_env: camera.rtsp_url_env.as_str().to_owned(),
+        onvif_url: camera.onvif_url.as_ref().map(ToString::to_string),
+        onvif_credentials_env: camera
+            .onvif_credentials_env
+            .as_ref()
+            .map(|environment_variable| environment_variable.as_str().to_owned()),
+        motion_min_area: i64::from(camera.motion_min_area),
+        yolo_confidence: f64::from(camera.yolo_confidence),
+    }
 }
 
 fn init_logging() {

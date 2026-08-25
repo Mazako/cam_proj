@@ -1,5 +1,6 @@
 [app]
 bind_address = "127.0.0.1:8080"
+database_path = "data/camwatch.sqlite3"
 pre_event_seconds = 10
 post_event_seconds = 20
 rolling_buffer_seconds = 30

@@ -1,0 +1,11 @@
+{
+  "[sql]": {
+    "editor.defaultFormatter": "sqlfluff.vscode-sqlfluff",
+    "editor.formatOnSave": true
+  },
+  "sqlfluff.config": "${workspaceFolder}/.sqlfluff",
+  "sqlfluff.dialect": "sqlite",
+  "rust-analyzer.linkedProjects": [
+    "${workspaceFolder}/camwatch/Cargo.toml"
+  ]
+}

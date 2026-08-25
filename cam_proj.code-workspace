@@ -1,0 +1,33 @@
+{
+  "folders": [
+    {
+      "name": "camwatch",
+      "path": "camwatch"
+    },
+    {
+      "name": "Documentation",
+      "path": "docs"
+    },
+    {
+      "name": "Experiments",
+      "path": "experiments"
+    }
+  ],
+  "settings": {
+    "[sql]": {
+      "editor.defaultFormatter": "sqlfluff.vscode-sqlfluff",
+      "editor.formatOnSave": true
+    },
+    "rust-analyzer.linkedProjects": [
+      "${workspaceFolder:camwatch}/Cargo.toml"
+    ],
+    "sqlfluff.config": "${workspaceFolder:camwatch}/../.sqlfluff",
+    "sqlfluff.dialect": "sqlite"
+  },
+  "extensions": {
+    "recommendations": [
+      "rust-lang.rust-analyzer",
+      "sqlfluff.vscode-sqlfluff"
+    ]
+  }
+}
