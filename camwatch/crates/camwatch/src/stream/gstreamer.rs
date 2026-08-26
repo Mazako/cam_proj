@@ -8,6 +8,7 @@ use std::{
     time::SystemTime,
 };
 
+use backon::{BackoffBuilder, ExponentialBuilder};
 use gstreamer::{self as gst, prelude::*};
 use gstreamer_app::{self as gst_app};
 use tokio::sync::mpsc;
@@ -18,7 +19,7 @@ use crate::ports::{
     PortFuture,
 };
 
-use super::{ReconnectBackoff, RtspCodec, pipeline_description};
+use super::{RtspCodec, pipeline_description};
 
 const EVENT_BUFFER_CAPACITY: usize = 8;
 
@@ -68,16 +69,17 @@ fn run_worker(
     codec: RtspCodec,
     sender: mpsc::Sender<Result<CameraStreamEvent, CameraStreamError>>,
 ) {
-    let mut backoff = ReconnectBackoff::new(
-        std::time::Duration::from_secs(1),
-        std::time::Duration::from_secs(30),
-    )
-    .expect("fixed reconnect configuration is valid");
+    let reconnect_backoff = ExponentialBuilder::default()
+        .with_jitter()
+        .with_min_delay(std::time::Duration::from_secs(1))
+        .with_max_delay(std::time::Duration::from_secs(30))
+        .without_max_times();
+    let mut backoff = reconnect_backoff.build();
 
     loop {
         let connected = run_pipeline(&rtsp_url, codec, &sender).is_ok();
         if connected {
-            backoff.reset();
+            backoff = reconnect_backoff.build();
         }
 
         if sender
@@ -89,7 +91,10 @@ fn run_worker(
             return;
         }
 
-        thread::sleep(backoff.next_delay());
+        let delay = backoff
+            .next()
+            .expect("reconnect backoff has no attempt limit");
+        thread::sleep(delay);
     }
 }
 

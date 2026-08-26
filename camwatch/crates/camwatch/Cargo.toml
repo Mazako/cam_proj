@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+backon.workspace = true
 clap = { workspace = true, features = ["env"] }
 gstreamer.workspace = true
 gstreamer-app.workspace = true
