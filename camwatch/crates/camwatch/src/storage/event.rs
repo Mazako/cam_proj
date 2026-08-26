@@ -1,5 +1,3 @@
-use super::StorageError;
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct NewEvent {
     pub camera_id: String,
@@ -7,7 +5,7 @@ pub struct NewEvent {
     pub trigger: String,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, sqlx::FromRow)]
 pub struct Event {
     pub id: String,
     pub camera_id: String,
@@ -21,31 +19,11 @@ pub struct Event {
     pub updated_at: i64,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, sqlx::Type)]
+#[sqlx(rename_all = "snake_case")]
 pub enum EventStatus {
     Recording,
     Finalizing,
     Ready,
     Failed,
-}
-
-impl EventStatus {
-    pub(super) fn as_str(self) -> &'static str {
-        match self {
-            Self::Recording => "recording",
-            Self::Finalizing => "finalizing",
-            Self::Ready => "ready",
-            Self::Failed => "failed",
-        }
-    }
-
-    pub(super) fn parse(value: &str) -> Result<Self, StorageError> {
-        match value {
-            "recording" => Ok(Self::Recording),
-            "finalizing" => Ok(Self::Finalizing),
-            "ready" => Ok(Self::Ready),
-            "failed" => Ok(Self::Failed),
-            _ => Err(StorageError::InvalidStoredStatus),
-        }
-    }
 }

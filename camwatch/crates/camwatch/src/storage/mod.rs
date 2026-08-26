@@ -3,7 +3,6 @@ mod database;
 mod error;
 mod event;
 mod repository;
-mod rows;
 mod upload;
 
 pub use camera::{Camera, NewCamera};

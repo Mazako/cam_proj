@@ -1,5 +1,3 @@
-use super::StorageError;
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct NewUpload {
     pub event_id: String,
@@ -7,7 +5,7 @@ pub struct NewUpload {
     pub next_attempt_at: Option<i64>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, sqlx::FromRow)]
 pub struct Upload {
     pub id: String,
     pub event_id: String,
@@ -21,31 +19,11 @@ pub struct Upload {
     pub updated_at: i64,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, sqlx::Type)]
+#[sqlx(rename_all = "snake_case")]
 pub enum UploadStatus {
     Pending,
     InProgress,
     Uploaded,
     Failed,
-}
-
-impl UploadStatus {
-    pub(super) fn as_str(self) -> &'static str {
-        match self {
-            Self::Pending => "pending",
-            Self::InProgress => "in_progress",
-            Self::Uploaded => "uploaded",
-            Self::Failed => "failed",
-        }
-    }
-
-    pub(super) fn parse(value: &str) -> Result<Self, StorageError> {
-        match value {
-            "pending" => Ok(Self::Pending),
-            "in_progress" => Ok(Self::InProgress),
-            "uploaded" => Ok(Self::Uploaded),
-            "failed" => Ok(Self::Failed),
-            _ => Err(StorageError::InvalidStoredStatus),
-        }
-    }
 }

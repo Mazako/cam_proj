@@ -3,9 +3,7 @@ use uuid::Uuid;
 
 use super::{
     Camera, Database, Event, EventStatus, NewCamera, NewEvent, NewUpload, StorageError, Upload,
-    UploadStatus,
-    database::unix_time_millis,
-    rows::{CameraRow, EventRow, UploadRow},
+    UploadStatus, database::unix_time_millis,
 };
 
 impl Database {
@@ -45,7 +43,7 @@ impl Database {
     }
 
     pub async fn get_camera(&self, id: &str) -> Result<Option<Camera>, StorageError> {
-        let row = query_as::<_, CameraRow>(
+        let camera = query_as::<_, Camera>(
             "SELECT id, name, enabled, rtsp_url_env, onvif_url, onvif_credentials_env,
                     motion_min_area, yolo_confidence, created_at, updated_at, deleted_at
              FROM cameras WHERE id = ?",
@@ -55,7 +53,7 @@ impl Database {
         .await
         .map_err(StorageError::Database)?;
 
-        Ok(row.map(Camera::from))
+        Ok(camera)
     }
 
     pub async fn create_event(&self, event: NewEvent) -> Result<Event, StorageError> {
@@ -72,7 +70,7 @@ impl Database {
         .bind(&event.camera_id)
         .bind(event.started_at)
         .bind(&event.trigger)
-        .bind(status.as_str())
+        .bind(status)
         .bind(now)
         .bind(now)
         .execute(&self.pool)
@@ -94,7 +92,7 @@ impl Database {
     }
 
     pub async fn get_event(&self, id: &str) -> Result<Option<Event>, StorageError> {
-        let row = query_as::<_, EventRow>(
+        let event = query_as::<_, Event>(
             "SELECT id, camera_id, started_at, ended_at, \"trigger\", clip_path, clip_duration_ms,
                     status, created_at, updated_at
              FROM \"events\" WHERE id = ?",
@@ -104,7 +102,7 @@ impl Database {
         .await
         .map_err(StorageError::Database)?;
 
-        row.map(Event::try_from).transpose()
+        Ok(event)
     }
 
     pub async fn create_upload(&self, upload: NewUpload) -> Result<Upload, StorageError> {
@@ -120,7 +118,7 @@ impl Database {
         .bind(&id)
         .bind(&upload.event_id)
         .bind(&upload.provider)
-        .bind(status.as_str())
+        .bind(status)
         .bind(upload.next_attempt_at)
         .bind(now)
         .bind(now)
@@ -143,7 +141,7 @@ impl Database {
     }
 
     pub async fn get_upload(&self, id: &str) -> Result<Option<Upload>, StorageError> {
-        let row = query_as::<_, UploadRow>(
+        let upload = query_as::<_, Upload>(
             "SELECT id, event_id, provider, status, attempt_count, next_attempt_at,
                     remote_file_id, last_error, created_at, updated_at
              FROM uploads WHERE id = ?",
@@ -153,6 +151,6 @@ impl Database {
         .await
         .map_err(StorageError::Database)?;
 
-        row.map(Upload::try_from).transpose()
+        Ok(upload)
     }
 }

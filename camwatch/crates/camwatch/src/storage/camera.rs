@@ -9,7 +9,7 @@ pub struct NewCamera {
     pub yolo_confidence: f64,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, sqlx::FromRow)]
 pub struct Camera {
     pub id: String,
     pub name: String,
