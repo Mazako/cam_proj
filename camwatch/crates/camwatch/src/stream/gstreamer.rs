@@ -1,0 +1,181 @@
+use std::{
+    env,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread,
+    time::SystemTime,
+};
+
+use gstreamer::{self as gst, prelude::*};
+use gstreamer_app::{self as gst_app};
+use tokio::sync::mpsc;
+use url::Url;
+
+use crate::ports::{
+    CameraStream, CameraStreamError, CameraStreamEvent, CameraStreamStatus, Frame, PixelFormat,
+    PortFuture,
+};
+
+use super::{ReconnectBackoff, RtspCodec, pipeline_description};
+
+const EVENT_BUFFER_CAPACITY: usize = 8;
+
+pub struct GstreamerCameraStream {
+    receiver: mpsc::Receiver<Result<CameraStreamEvent, CameraStreamError>>,
+}
+
+impl GstreamerCameraStream {
+    pub fn from_environment(
+        rtsp_url_env: &str,
+        codec: RtspCodec,
+    ) -> Result<Self, CameraStreamError> {
+        let rtsp_url = env::var(rtsp_url_env).map_err(|_| CameraStreamError::Unavailable)?;
+        Self::new(rtsp_url, codec)
+    }
+
+    pub fn new(rtsp_url: String, codec: RtspCodec) -> Result<Self, CameraStreamError> {
+        let url = Url::parse(&rtsp_url).map_err(|_| CameraStreamError::Unavailable)?;
+        if !matches!(url.scheme(), "rtsp" | "rtsps") {
+            return Err(CameraStreamError::Unavailable);
+        }
+        gst::init().map_err(|_| CameraStreamError::Failed)?;
+
+        let (sender, receiver) = mpsc::channel(EVENT_BUFFER_CAPACITY);
+        thread::Builder::new()
+            .name("camwatch-rtsp".to_owned())
+            .spawn(move || run_worker(rtsp_url, codec, sender))
+            .map_err(|_| CameraStreamError::Failed)?;
+
+        Ok(Self { receiver })
+    }
+}
+
+impl CameraStream for GstreamerCameraStream {
+    fn next_event(&mut self) -> PortFuture<'_, Result<CameraStreamEvent, CameraStreamError>> {
+        Box::pin(async move {
+            self.receiver
+                .recv()
+                .await
+                .unwrap_or(Err(CameraStreamError::Unavailable))
+        })
+    }
+}
+
+fn run_worker(
+    rtsp_url: String,
+    codec: RtspCodec,
+    sender: mpsc::Sender<Result<CameraStreamEvent, CameraStreamError>>,
+) {
+    let mut backoff = ReconnectBackoff::new(
+        std::time::Duration::from_secs(1),
+        std::time::Duration::from_secs(30),
+    )
+    .expect("fixed reconnect configuration is valid");
+
+    loop {
+        let connected = run_pipeline(&rtsp_url, codec, &sender).is_ok();
+        if connected {
+            backoff.reset();
+        }
+
+        if sender
+            .blocking_send(Ok(CameraStreamEvent::Status(CameraStreamStatus::Offline {
+                since: SystemTime::now(),
+            })))
+            .is_err()
+        {
+            return;
+        }
+
+        thread::sleep(backoff.next_delay());
+    }
+}
+
+fn run_pipeline(
+    rtsp_url: &str,
+    codec: RtspCodec,
+    sender: &mpsc::Sender<Result<CameraStreamEvent, CameraStreamError>>,
+) -> Result<(), CameraStreamError> {
+    let element = gst::parse::launch(&pipeline_description(rtsp_url, codec))
+        .map_err(|_| CameraStreamError::Failed)?;
+    let pipeline = element
+        .downcast::<gst::Pipeline>()
+        .map_err(|_| CameraStreamError::Failed)?;
+    let appsink = pipeline
+        .by_name("analysis_sink")
+        .and_downcast::<gst_app::AppSink>()
+        .ok_or(CameraStreamError::Failed)?;
+    let frame_sender = sender.clone();
+    let received_frame = Arc::new(AtomicBool::new(false));
+    let online_sender = sender.clone();
+    let online_reported = Arc::clone(&received_frame);
+
+    appsink.set_callbacks(
+        gst_app::AppSinkCallbacks::builder()
+            .new_sample(move |sink| {
+                let sample = sink.pull_sample().map_err(|_| gst::FlowError::Error)?;
+                let frame = frame_from_sample(sample).map_err(|_| gst::FlowError::Error)?;
+                if !online_reported.swap(true, Ordering::Relaxed) {
+                    match online_sender.try_send(Ok(CameraStreamEvent::Status(
+                        CameraStreamStatus::Online {
+                            since: SystemTime::now(),
+                        },
+                    ))) {
+                        Err(mpsc::error::TrySendError::Closed(_)) => {
+                            return Err(gst::FlowError::Eos);
+                        }
+                        Ok(()) | Err(mpsc::error::TrySendError::Full(_)) => {}
+                    }
+                }
+                match frame_sender.try_send(Ok(CameraStreamEvent::Frame(frame))) {
+                    Err(mpsc::error::TrySendError::Closed(_)) => Err(gst::FlowError::Eos),
+                    Ok(()) | Err(mpsc::error::TrySendError::Full(_)) => Ok(gst::FlowSuccess::Ok),
+                }
+            })
+            .build(),
+    );
+
+    pipeline
+        .set_state(gst::State::Playing)
+        .map_err(|_| CameraStreamError::Unavailable)?;
+
+    let bus = pipeline.bus().ok_or(CameraStreamError::Failed)?;
+    let result = loop {
+        let Some(message) = bus.timed_pop(gst::ClockTime::NONE) else {
+            break Err(CameraStreamError::Unavailable);
+        };
+
+        match message.view() {
+            gst::MessageView::Eos(..) | gst::MessageView::Error(..) => {
+                break Err(CameraStreamError::Unavailable);
+            }
+            _ => {}
+        }
+    };
+
+    let _ = pipeline.set_state(gst::State::Null);
+    if received_frame.load(Ordering::Relaxed) {
+        Ok(())
+    } else {
+        result
+    }
+}
+
+fn frame_from_sample(sample: gst::Sample) -> Result<Frame, ()> {
+    let caps = sample.caps().ok_or(())?;
+    let structure = caps.structure(0).ok_or(())?;
+    let width = structure.get::<i32>("width").map_err(|_| ())?;
+    let height = structure.get::<i32>("height").map_err(|_| ())?;
+    let buffer = sample.buffer().ok_or(())?;
+    let map = buffer.map_readable().map_err(|_| ())?;
+
+    Ok(Frame {
+        data: map.as_slice().to_vec(),
+        width: width.try_into().map_err(|_| ())?,
+        height: height.try_into().map_err(|_| ())?,
+        pixel_format: PixelFormat::Bgr8,
+        captured_at: SystemTime::now(),
+    })
+}

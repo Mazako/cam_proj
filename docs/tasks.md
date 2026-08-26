@@ -59,6 +59,8 @@ Każdy task jest powiązany z wymaganiami z [dokumentu przewodniego](README.md).
 
 ### VID-01: Odbiór RTSP dla jednej kamery
 
+**Status:** In progress
+
 **Pokrywa:** FR-02, NFR-01
 
 **Zakres:** pipeline GStreamer RTSP, wybór kodeka, zdarzenia stanu oraz reconnect z narastającym opóźnieniem.

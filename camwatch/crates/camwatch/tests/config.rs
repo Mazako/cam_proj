@@ -1,4 +1,4 @@
-use camwatch::config::Config;
+use camwatch::{config::Config, stream::RtspCodec};
 
 const VALID_CONFIG: &str = r#"
 [app]
@@ -12,6 +12,7 @@ rolling_buffer_seconds = 30
 id = "front-door"
 name = "Front door"
 rtsp_url_env = "CAMWATCH_FRONT_DOOR_RTSP_URL"
+rtsp_codec = "h265"
 onvif_url = "http://192.168.1.65:2020/onvif/device_service"
 onvif_credentials_env = "CAMWATCH_FRONT_DOOR_ONVIF_CREDENTIALS"
 motion_min_area = 1000
@@ -23,7 +24,17 @@ fn parses_a_configuration_with_a_camera() {
     let config = Config::parse(VALID_CONFIG).expect("valid configuration should load");
 
     assert_eq!(config.cameras.len(), 1);
+    assert_eq!(config.cameras[0].rtsp_codec, RtspCodec::H265);
     assert_eq!(config.app.bind_address.to_string(), "127.0.0.1:8080");
+}
+
+#[test]
+fn defaults_camera_codec_to_h264() {
+    let input = VALID_CONFIG.replace("rtsp_codec = \"h265\"\n", "");
+
+    let config = Config::parse(&input).expect("configuration should default to H.264");
+
+    assert_eq!(config.cameras[0].rtsp_codec, RtspCodec::H264);
 }
 
 #[test]

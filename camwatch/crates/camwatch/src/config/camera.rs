@@ -2,6 +2,7 @@ use serde::Deserialize;
 use url::Url;
 
 use super::environment::EnvironmentVariableName;
+use crate::stream::RtspCodec;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -9,6 +10,8 @@ pub struct CameraConfig {
     pub id: CameraId,
     pub name: String,
     pub rtsp_url_env: EnvironmentVariableName,
+    #[serde(default)]
+    pub rtsp_codec: RtspCodec,
     pub onvif_url: Option<Url>,
     pub onvif_credentials_env: Option<EnvironmentVariableName>,
     pub motion_min_area: u32,

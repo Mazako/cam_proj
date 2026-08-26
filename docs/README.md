@@ -113,9 +113,10 @@ rolling_buffer_seconds = 30
 [[cameras]]
 id = "front-door"
 name = "Front door"
-rtsp_url_secret = "camera/front-door/rtsp-url"
+rtsp_url_env = "CAMWATCH_FRONT_DOOR_RTSP_URL"
+rtsp_codec = "h264"
 onvif_url = "http://192.168.1.65:2020/onvif/device_service"
-onvif_credentials_secret = "camera/front-door/onvif"
+onvif_credentials_env = "CAMWATCH_FRONT_DOOR_ONVIF_CREDENTIALS"
 motion_min_area = 1000
 yolo_confidence = 0.50
 ```

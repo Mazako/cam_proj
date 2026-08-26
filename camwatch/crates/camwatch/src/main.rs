@@ -1,11 +1,13 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use clap::Parser;
 use tracing_subscriber::EnvFilter;
 
 use camwatch::{
     config::{CameraConfig, Config},
+    ports::{CameraStream, CameraStreamEvent, CameraStreamStatus},
     storage::{Database, NewCamera},
+    stream::{CameraStatusModel, GstreamerCameraStream},
 };
 
 #[derive(Debug, Parser)]
@@ -63,6 +65,59 @@ async fn main() {
         bind_address = %config.app.bind_address,
         "configuration loaded"
     );
+
+    let status_model = Arc::new(CameraStatusModel::default());
+    for camera in &config.cameras {
+        match GstreamerCameraStream::from_environment(
+            camera.rtsp_url_env.as_str(),
+            camera.rtsp_codec,
+        ) {
+            Ok(stream) => {
+                tokio::spawn(log_camera_stream(
+                    camera.id.as_str().to_owned(),
+                    stream,
+                    Arc::clone(&status_model),
+                ));
+            }
+            Err(_) => {
+                tracing::warn!(
+                    camera_id = camera.id.as_str(),
+                    "camera stream could not start"
+                );
+            }
+        }
+    }
+
+    if !config.cameras.is_empty() {
+        let _ = tokio::signal::ctrl_c().await;
+    }
+}
+
+async fn log_camera_stream(
+    camera_id: String,
+    mut stream: GstreamerCameraStream,
+    status_model: Arc<CameraStatusModel>,
+) {
+    loop {
+        match stream.next_event().await {
+            Ok(CameraStreamEvent::Status(status)) => {
+                status_model.update(&camera_id, status);
+                match status {
+                    CameraStreamStatus::Online { .. } => {
+                        tracing::info!(camera_id, "camera stream is online");
+                    }
+                    CameraStreamStatus::Offline { .. } => {
+                        tracing::warn!(camera_id, "camera stream is offline");
+                    }
+                }
+            }
+            Ok(CameraStreamEvent::Frame(_)) => {}
+            Err(_) => {
+                tracing::warn!(camera_id, "camera stream stopped");
+                return;
+            }
+        }
+    }
 }
 
 fn new_camera(camera: &CameraConfig) -> NewCamera {
