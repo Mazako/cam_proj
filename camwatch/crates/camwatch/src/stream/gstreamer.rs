@@ -112,9 +112,8 @@ fn run_pipeline(
         .by_name("analysis_sink")
         .and_downcast::<gst_app::AppSink>()
         .ok_or(CameraStreamError::Failed)?;
-    let frame_sender = sender.clone();
+    let event_sender = sender.clone();
     let received_frame = Arc::new(AtomicBool::new(false));
-    let online_sender = sender.clone();
     let online_reported = Arc::clone(&received_frame);
 
     appsink.set_callbacks(
@@ -123,7 +122,7 @@ fn run_pipeline(
                 let sample = sink.pull_sample().map_err(|_| gst::FlowError::Error)?;
                 let frame = frame_from_sample(sample).map_err(|_| gst::FlowError::Error)?;
                 if !online_reported.swap(true, Ordering::Relaxed) {
-                    match online_sender.try_send(Ok(CameraStreamEvent::Status(
+                    match event_sender.try_send(Ok(CameraStreamEvent::Status(
                         CameraStreamStatus::Online {
                             since: SystemTime::now(),
                         },
@@ -134,7 +133,7 @@ fn run_pipeline(
                         Ok(()) | Err(mpsc::error::TrySendError::Full(_)) => {}
                     }
                 }
-                match frame_sender.try_send(Ok(CameraStreamEvent::Frame(frame))) {
+                match event_sender.try_send(Ok(CameraStreamEvent::Frame(frame))) {
                     Err(mpsc::error::TrySendError::Closed(_)) => Err(gst::FlowError::Eos),
                     Ok(()) | Err(mpsc::error::TrySendError::Full(_)) => Ok(gst::FlowSuccess::Ok),
                 }
