@@ -1,8 +1,8 @@
 use gstreamer::{self as gst, prelude::*};
 use thiserror::Error;
 
-use super::RtspCodec;
 use super::segment_recording::{SegmentOutput, SegmentRecordingConfig, SegmentRecordingError};
+use super::{RtspCodec, escape_pipeline_value};
 
 #[derive(Debug, Error)]
 pub enum PipelineError {
@@ -85,8 +85,4 @@ fn codec_elements(codec: RtspCodec) -> (&'static str, &'static str, &'static str
         RtspCodec::H264 => ("rtph264depay", "h264parse", "avdec_h264"),
         RtspCodec::H265 => ("rtph265depay", "h265parse", "avdec_h265"),
     }
-}
-
-fn escape_pipeline_value(value: &str) -> String {
-    value.replace('\\', "\\\\").replace('"', "\\\"")
 }

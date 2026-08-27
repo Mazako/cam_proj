@@ -1,4 +1,4 @@
-use std::time::SystemTime;
+use std::{path::PathBuf, time::SystemTime};
 
 use super::{Frame, PortFuture};
 
@@ -10,6 +10,11 @@ pub trait CameraStream: Send {
 pub enum CameraStreamEvent {
     Status(CameraStreamStatus),
     Frame(Frame),
+    SegmentFinalized {
+        path: PathBuf,
+        started_at: SystemTime,
+        ended_at: SystemTime,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

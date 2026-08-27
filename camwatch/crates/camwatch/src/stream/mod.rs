@@ -9,3 +9,7 @@ pub use gstreamer::GstreamerCameraStream;
 pub use pipeline::{PipelineError, build_pipeline};
 pub use segment_recording::{SegmentRecordingConfig, SegmentRecordingError};
 pub use status_model::CameraStatusModel;
+
+pub(crate) fn escape_pipeline_value(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
+}

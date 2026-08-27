@@ -1,4 +1,6 @@
-use super::{Clip, PortFuture};
+use crate::clips::Clip;
+
+use super::PortFuture;
 
 pub trait DriveUploader: Send + Sync {
     fn upload(

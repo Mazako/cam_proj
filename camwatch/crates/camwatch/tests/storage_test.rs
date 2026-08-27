@@ -1,6 +1,8 @@
 use tempfile::tempdir;
 
-use camwatch::storage::{Database, EventStatus, NewCamera, NewEvent, NewUpload, UploadStatus};
+use camwatch::storage::{
+    Database, EventStatus, NewCamera, NewEvent, NewSegment, NewUpload, UploadStatus,
+};
 
 #[tokio::test]
 async fn persists_an_event_and_upload_after_reopening_the_database() {
@@ -48,6 +50,16 @@ async fn persists_an_event_and_upload_after_reopening_the_database() {
         })
         .await
         .expect("upload should be saved");
+    database
+        .upsert_segment(NewSegment {
+            camera_id: "front-door".to_owned(),
+            path: "/data/segments/front-door/segment-0000000000.mp4".to_owned(),
+            started_at: 1_700_000_000_000,
+            ended_at: 1_700_000_002_000,
+            size_bytes: 42,
+        })
+        .await
+        .expect("segment should be saved");
 
     assert_eq!(
         database
@@ -69,6 +81,14 @@ async fn persists_an_event_and_upload_after_reopening_the_database() {
             .await
             .expect("upload should load"),
         Some(upload.clone())
+    );
+    assert_eq!(
+        database
+            .segments_overlapping("front-door", 1_700_000_001_000, 1_700_000_001_000)
+            .await
+            .expect("segment should load")
+            .len(),
+        1
     );
 
     drop(database);
@@ -97,6 +117,14 @@ async fn persists_an_event_and_upload_after_reopening_the_database() {
             .await
             .expect("upload should persist")
             .is_some()
+    );
+    assert_eq!(
+        reopened
+            .segments_overlapping("front-door", 1_700_000_001_000, 1_700_000_001_000)
+            .await
+            .expect("segment should survive reopening")
+            .len(),
+        1
     );
 }
 

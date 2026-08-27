@@ -1,14 +1,16 @@
+use std::time::SystemTime;
+
 use sqlx::query_as;
 use uuid::Uuid;
 
 use super::{
-    Camera, Database, Event, EventStatus, NewCamera, NewEvent, NewUpload, StorageError, Upload,
-    UploadStatus, database::unix_time_millis,
+    Camera, Database, Event, EventStatus, NewCamera, NewEvent, NewSegment, NewUpload, Segment,
+    StorageError, Upload, UploadStatus, unix_time_millis,
 };
 
 impl Database {
     pub async fn seed_cameras(&self, cameras: &[NewCamera]) -> Result<(), StorageError> {
-        let now = unix_time_millis();
+        let now = unix_time_millis(SystemTime::now()).unwrap_or_default();
         let mut transaction = self.pool.begin().await.map_err(StorageError::Database)?;
 
         for camera in cameras {
@@ -58,7 +60,7 @@ impl Database {
 
     pub async fn create_event(&self, event: NewEvent) -> Result<Event, StorageError> {
         let id = Uuid::now_v7().to_string();
-        let now = unix_time_millis();
+        let now = unix_time_millis(SystemTime::now()).unwrap_or_default();
         let status = EventStatus::Recording;
 
         sqlx::query(
@@ -105,9 +107,59 @@ impl Database {
         Ok(event)
     }
 
+    pub async fn upsert_segment(&self, segment: NewSegment) -> Result<(), StorageError> {
+        let now = unix_time_millis(SystemTime::now()).unwrap_or_default();
+
+        sqlx::query(
+            "INSERT INTO segments (
+                path, camera_id, started_at, ended_at, size_bytes, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(path) DO UPDATE SET
+                camera_id = excluded.camera_id,
+                started_at = excluded.started_at,
+                ended_at = excluded.ended_at,
+                size_bytes = excluded.size_bytes,
+                updated_at = excluded.updated_at",
+        )
+        .bind(&segment.path)
+        .bind(&segment.camera_id)
+        .bind(segment.started_at)
+        .bind(segment.ended_at)
+        .bind(segment.size_bytes)
+        .bind(now)
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .map_err(StorageError::Database)?;
+
+        Ok(())
+    }
+
+    pub async fn segments_overlapping(
+        &self,
+        camera_id: &str,
+        started_at: i64,
+        ended_at: i64,
+    ) -> Result<Vec<Segment>, StorageError> {
+        let segments = query_as::<_, Segment>(
+            "SELECT camera_id, path, started_at, ended_at, size_bytes
+             FROM segments
+             WHERE camera_id = ? AND started_at <= ? AND ended_at >= ?
+             ORDER BY started_at, path",
+        )
+        .bind(camera_id)
+        .bind(ended_at)
+        .bind(started_at)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(StorageError::Database)?;
+
+        Ok(segments)
+    }
+
     pub async fn create_upload(&self, upload: NewUpload) -> Result<Upload, StorageError> {
         let id = Uuid::now_v7().to_string();
-        let now = unix_time_millis();
+        let now = unix_time_millis(SystemTime::now()).unwrap_or_default();
         let status = UploadStatus::Pending;
 
         sqlx::query(

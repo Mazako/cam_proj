@@ -1,11 +1,13 @@
 use std::{
+    collections::HashMap,
     env,
+    path::PathBuf,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
     thread,
-    time::SystemTime,
+    time::{Duration, SystemTime},
 };
 
 use backon::{BackoffBuilder, ExponentialBuilder};
@@ -22,6 +24,46 @@ use crate::ports::{
 use super::{RtspCodec, SegmentRecordingConfig, build_pipeline};
 
 const EVENT_BUFFER_CAPACITY: usize = 8;
+
+struct SegmentTimes {
+    pipeline_started_at: SystemTime,
+    opened_at: HashMap<PathBuf, SystemTime>,
+}
+
+impl SegmentTimes {
+    fn new(pipeline_started_at: SystemTime) -> Self {
+        Self {
+            pipeline_started_at,
+            opened_at: HashMap::new(),
+        }
+    }
+
+    fn handle(&mut self, element: &gst::message::Element) -> Option<CameraStreamEvent> {
+        let structure = element.structure()?;
+        let location = structure.get::<String>("location").ok()?;
+        let running_time = structure.get::<gst::ClockTime>("running-time").ok()?;
+        let at = self
+            .pipeline_started_at
+            .checked_add(Duration::from_nanos(running_time.nseconds()))?;
+        let path = PathBuf::from(location);
+
+        match structure.name().as_str() {
+            "splitmuxsink-fragment-opened" => {
+                self.opened_at.insert(path, at);
+                None
+            }
+            "splitmuxsink-fragment-closed" => {
+                let started_at = self.opened_at.remove(&path)?;
+                Some(CameraStreamEvent::SegmentFinalized {
+                    path,
+                    started_at,
+                    ended_at: at,
+                })
+            }
+            _ => None,
+        }
+    }
+}
 
 pub struct GstreamerCameraStream {
     receiver: mpsc::Receiver<Result<CameraStreamEvent, CameraStreamError>>,
@@ -150,6 +192,7 @@ fn run_pipeline(
         .map_err(|_| CameraStreamError::Unavailable)?;
 
     let bus = pipeline.bus().ok_or(CameraStreamError::Failed)?;
+    let mut segment_times = SegmentTimes::new(SystemTime::now());
     let result = loop {
         let Some(message) = bus.timed_pop(gst::ClockTime::NONE) else {
             break Err(CameraStreamError::Unavailable);
@@ -158,6 +201,13 @@ fn run_pipeline(
         match message.view() {
             gst::MessageView::Eos(..) | gst::MessageView::Error(..) => {
                 break Err(CameraStreamError::Unavailable);
+            }
+            gst::MessageView::Element(element) => {
+                if let Some(event) = segment_times.handle(element)
+                    && sender.blocking_send(Ok(event)).is_err()
+                {
+                    break Err(CameraStreamError::Unavailable);
+                }
             }
             _ => {}
         }

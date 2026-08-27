@@ -14,6 +14,7 @@ use super::StorageError;
 
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 
+#[derive(Clone)]
 pub struct Database {
     pub(super) pool: SqlitePool,
 }
@@ -45,9 +46,10 @@ impl Database {
     }
 }
 
-pub(super) fn unix_time_millis() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis().try_into().unwrap_or(i64::MAX))
-        .unwrap_or_default()
+pub(crate) fn unix_time_millis(time: SystemTime) -> Option<i64> {
+    time.duration_since(UNIX_EPOCH)
+        .ok()?
+        .as_millis()
+        .try_into()
+        .ok()
 }

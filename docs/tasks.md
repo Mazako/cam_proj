@@ -101,20 +101,6 @@ Każdy task jest powiązany z wymaganiami z [dokumentu przewodniego](README.md).
 
 **Zależności:** ARC-02, VID-02.
 
-### VID-04: HLS dla podglądu WWW
-
-**Pokrywa:** FR-09
-
-**Zakres:** pipeline HLS per kamera, czyszczenie starych segmentów i endpoint do serwowania playlisty.
-
-**Kryteria akceptacji:**
-
-- Aktualny obraz kamery można otworzyć w przeglądarce przez HLS.
-- Opóźnienie jest mierzalne i prezentowane w statusie kamery.
-- Niedostępna kamera nie blokuje playlist innych kamer.
-
-**Zależności:** VID-01.
-
 ## Etap 2 — detekcja i zdarzenia
 
 ### DET-01: MOG2 jako detektor ruchu
@@ -218,6 +204,20 @@ Każdy task jest powiązany z wymaganiami z [dokumentu przewodniego](README.md).
 - Aplikacja domyślnie nasłuchuje tylko lokalnie.
 
 **Zależności:** ARC-01.
+
+### VID-04: HLS dla podglądu WWW
+
+**Pokrywa:** FR-09
+
+**Zakres:** pipeline HLS per kamera, czyszczenie starych segmentów i endpoint do serwowania playlisty.
+
+**Kryteria akceptacji:**
+
+- Aktualny obraz kamery można otworzyć w przeglądarce przez HLS.
+- Opóźnienie jest mierzalne i prezentowane w statusie kamery.
+- Niedostępna kamera nie blokuje playlist innych kamer.
+
+**Zależności:** VID-01, WEB-01.
 
 ### WEB-02: Widok kamer i historia zdarzeń
 
