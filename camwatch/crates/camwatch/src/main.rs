@@ -4,9 +4,8 @@ use clap::Parser;
 use tracing_subscriber::EnvFilter;
 
 use camwatch::{
-    clips::store_segment,
     config::{CameraConfig, Config},
-    ports::{CameraStream, CameraStreamEvent, CameraStreamStatus},
+    runtime::CameraRuntime,
     storage::{Database, NewCamera},
     stream::{CameraStatusModel, GstreamerCameraStream, SegmentRecordingConfig},
 };
@@ -79,12 +78,15 @@ async fn main() {
             recording,
         ) {
             Ok(stream) => {
-                tokio::spawn(log_camera_stream(
-                    camera.id.as_str().to_owned(),
-                    stream,
-                    Arc::clone(&status_model),
-                    database.clone(),
-                ));
+                tokio::spawn(
+                    CameraRuntime::new(
+                        camera.id.as_str().to_owned(),
+                        stream,
+                        Arc::clone(&status_model),
+                        database.clone(),
+                    )
+                    .run(),
+                );
             }
             Err(_) => {
                 tracing::warn!(
@@ -97,45 +99,6 @@ async fn main() {
 
     if !config.cameras.is_empty() {
         let _ = tokio::signal::ctrl_c().await;
-    }
-}
-
-async fn log_camera_stream(
-    camera_id: String,
-    mut stream: GstreamerCameraStream,
-    status_model: Arc<CameraStatusModel>,
-    database: Database,
-) {
-    loop {
-        match stream.next_event().await {
-            Ok(CameraStreamEvent::Status(status)) => {
-                status_model.update(&camera_id, status);
-                match status {
-                    CameraStreamStatus::Online { .. } => {
-                        tracing::info!(camera_id, "camera stream is online");
-                    }
-                    CameraStreamStatus::Offline { .. } => {
-                        tracing::warn!(camera_id, "camera stream is offline");
-                    }
-                }
-            }
-            Ok(CameraStreamEvent::Frame(_)) => {}
-            Ok(CameraStreamEvent::SegmentFinalized {
-                path,
-                started_at,
-                ended_at,
-            }) => {
-                if let Err(error) =
-                    store_segment(&database, &camera_id, path, started_at, ended_at).await
-                {
-                    tracing::warn!(camera_id, %error, "segment could not be stored");
-                }
-            }
-            Err(_) => {
-                tracing::warn!(camera_id, "camera stream stopped");
-                return;
-            }
-        }
     }
 }
 

@@ -11,6 +11,7 @@ clap = { workspace = true, features = ["env"] }
 gstreamer.workspace = true
 gstreamer-app.workspace = true
 gstreamer-pbutils.workspace = true
+opencv.workspace = true
 serde.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
