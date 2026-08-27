@@ -41,6 +41,16 @@ impl Config {
                 "post_event_seconds and rolling_buffer_seconds must be greater than zero",
             ));
         }
+        if self.app.segment_rotation_seconds == 0 {
+            return Err(ConfigError::Validation(
+                "segment_rotation_seconds must be greater than zero",
+            ));
+        }
+        if self.app.segment_rotation_seconds > self.app.rolling_buffer_seconds {
+            return Err(ConfigError::Validation(
+                "segment_rotation_seconds cannot exceed rolling_buffer_seconds",
+            ));
+        }
 
         let mut camera_ids = std::collections::HashSet::new();
         for camera in &self.cameras {

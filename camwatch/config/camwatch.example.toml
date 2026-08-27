@@ -4,6 +4,8 @@ database_path = "data/camwatch.sqlite3"
 pre_event_seconds = 10
 post_event_seconds = 20
 rolling_buffer_seconds = 30
+segment_directory = "data/segments"
+segment_rotation_seconds = 2
 
 [[cameras]]
 id = "front-door"

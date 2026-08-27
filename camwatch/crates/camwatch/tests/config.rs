@@ -26,6 +26,11 @@ fn parses_a_configuration_with_a_camera() {
     assert_eq!(config.cameras.len(), 1);
     assert_eq!(config.cameras[0].rtsp_codec, RtspCodec::H265);
     assert_eq!(config.app.bind_address.to_string(), "127.0.0.1:8080");
+    assert_eq!(
+        config.app.segment_directory.to_string_lossy(),
+        "data/segments"
+    );
+    assert_eq!(config.app.segment_rotation_seconds, 2);
 }
 
 #[test]
@@ -79,5 +84,20 @@ fn rejects_incomplete_onvif_configuration() {
     assert_eq!(
         error.to_string(),
         "invalid configuration: onvif_url and onvif_credentials_env must be set together"
+    );
+}
+
+#[test]
+fn rejects_a_segment_rotation_longer_than_the_rolling_buffer() {
+    let input = VALID_CONFIG.replace(
+        "rolling_buffer_seconds = 30",
+        "rolling_buffer_seconds = 10\nsegment_rotation_seconds = 11",
+    );
+
+    let error = Config::parse(&input).expect_err("rotation cannot exceed the rolling buffer");
+
+    assert_eq!(
+        error.to_string(),
+        "invalid configuration: segment_rotation_seconds cannot exceed rolling_buffer_seconds"
     );
 }

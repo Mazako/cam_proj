@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use clap::Parser;
 use tracing_subscriber::EnvFilter;
@@ -7,7 +7,7 @@ use camwatch::{
     config::{CameraConfig, Config},
     ports::{CameraStream, CameraStreamEvent, CameraStreamStatus},
     storage::{Database, NewCamera},
-    stream::{CameraStatusModel, GstreamerCameraStream},
+    stream::{CameraStatusModel, GstreamerCameraStream, SegmentRecordingConfig},
 };
 
 #[derive(Debug, Parser)]
@@ -68,9 +68,14 @@ async fn main() {
 
     let status_model = Arc::new(CameraStatusModel::default());
     for camera in &config.cameras {
+        let recording = SegmentRecordingConfig::new(
+            config.app.segment_directory.join(camera.id.as_str()),
+            Duration::from_secs(u64::from(config.app.segment_rotation_seconds)),
+        );
         match GstreamerCameraStream::from_environment(
             camera.rtsp_url_env.as_str(),
             camera.rtsp_codec,
+            recording,
         ) {
             Ok(stream) => {
                 tokio::spawn(log_camera_stream(

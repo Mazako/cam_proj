@@ -19,7 +19,7 @@ use crate::ports::{
     PortFuture,
 };
 
-use super::{RtspCodec, pipeline_description};
+use super::{RtspCodec, SegmentRecordingConfig, build_pipeline};
 
 const EVENT_BUFFER_CAPACITY: usize = 8;
 
@@ -31,12 +31,17 @@ impl GstreamerCameraStream {
     pub fn from_environment(
         rtsp_url_env: &str,
         codec: RtspCodec,
+        recording: SegmentRecordingConfig,
     ) -> Result<Self, CameraStreamError> {
         let rtsp_url = env::var(rtsp_url_env).map_err(|_| CameraStreamError::Unavailable)?;
-        Self::new(rtsp_url, codec)
+        Self::new(rtsp_url, codec, recording)
     }
 
-    pub fn new(rtsp_url: String, codec: RtspCodec) -> Result<Self, CameraStreamError> {
+    pub fn new(
+        rtsp_url: String,
+        codec: RtspCodec,
+        recording: SegmentRecordingConfig,
+    ) -> Result<Self, CameraStreamError> {
         let url = Url::parse(&rtsp_url).map_err(|_| CameraStreamError::Unavailable)?;
         if !matches!(url.scheme(), "rtsp" | "rtsps") {
             return Err(CameraStreamError::Unavailable);
@@ -46,7 +51,7 @@ impl GstreamerCameraStream {
         let (sender, receiver) = mpsc::channel(EVENT_BUFFER_CAPACITY);
         thread::Builder::new()
             .name("camwatch-rtsp".to_owned())
-            .spawn(move || run_worker(rtsp_url, codec, sender))
+            .spawn(move || run_worker(rtsp_url, codec, recording, sender))
             .map_err(|_| CameraStreamError::Failed)?;
 
         Ok(Self { receiver })
@@ -67,6 +72,7 @@ impl CameraStream for GstreamerCameraStream {
 fn run_worker(
     rtsp_url: String,
     codec: RtspCodec,
+    recording: SegmentRecordingConfig,
     sender: mpsc::Sender<Result<CameraStreamEvent, CameraStreamError>>,
 ) {
     let reconnect_backoff = ExponentialBuilder::default()
@@ -77,7 +83,7 @@ fn run_worker(
     let mut backoff = reconnect_backoff.build();
 
     loop {
-        let connected = run_pipeline(&rtsp_url, codec, &sender).is_ok();
+        let connected = run_pipeline(&rtsp_url, codec, &recording, &sender).is_ok();
         if connected {
             backoff = reconnect_backoff.build();
         }
@@ -101,13 +107,11 @@ fn run_worker(
 fn run_pipeline(
     rtsp_url: &str,
     codec: RtspCodec,
+    recording: &SegmentRecordingConfig,
     sender: &mpsc::Sender<Result<CameraStreamEvent, CameraStreamError>>,
 ) -> Result<(), CameraStreamError> {
-    let element = gst::parse::launch(&pipeline_description(rtsp_url, codec))
-        .map_err(|_| CameraStreamError::Failed)?;
-    let pipeline = element
-        .downcast::<gst::Pipeline>()
-        .map_err(|_| CameraStreamError::Failed)?;
+    let pipeline =
+        build_pipeline(rtsp_url, codec, recording).map_err(|_| CameraStreamError::Failed)?;
     let appsink = pipeline
         .by_name("analysis_sink")
         .and_downcast::<gst_app::AppSink>()
