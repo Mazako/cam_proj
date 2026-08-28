@@ -67,7 +67,8 @@ async fn main() {
     );
 
     let status_model = Arc::new(CameraStatusModel::default());
-    for camera in &config.cameras {
+    let has_cameras = !config.cameras.is_empty();
+    for camera in config.cameras {
         let recording = SegmentRecordingConfig::new(
             config.app.segment_directory.join(camera.id.as_str()),
             Duration::from_secs(u64::from(config.app.segment_rotation_seconds)),
@@ -80,7 +81,8 @@ async fn main() {
             Ok(stream) => {
                 tokio::spawn(
                     CameraRuntime::new(
-                        camera.id.as_str().to_owned(),
+                        camera,
+                        &config.app,
                         stream,
                         Arc::clone(&status_model),
                         database.clone(),
@@ -97,7 +99,7 @@ async fn main() {
         }
     }
 
-    if !config.cameras.is_empty() {
+    if has_cameras {
         let _ = tokio::signal::ctrl_c().await;
     }
 }

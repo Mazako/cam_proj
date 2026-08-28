@@ -30,6 +30,7 @@ fn parses_a_configuration_with_a_camera() {
         config.app.segment_directory.to_string_lossy(),
         "data/segments"
     );
+    assert_eq!(config.app.clips_directory.to_string_lossy(), "data/clips");
     assert_eq!(config.app.segment_rotation_seconds, 2);
 }
 

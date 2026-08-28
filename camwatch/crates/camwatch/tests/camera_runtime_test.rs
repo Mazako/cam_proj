@@ -1,6 +1,7 @@
 use std::{collections::VecDeque, sync::Arc, time::SystemTime};
 
 use camwatch::{
+    config::{AppConfig, Config},
     ports::{CameraStream, CameraStreamError, CameraStreamEvent, CameraStreamStatus, PortFuture},
     runtime::CameraRuntime,
     storage::Database,
@@ -38,14 +39,18 @@ async fn updates_status_from_the_camera_stream() {
         ]),
     };
 
-    CameraRuntime::new(
-        "front-door".to_owned(),
+    let app_config = app_config();
+    let runtime = CameraRuntime::new(
+        camera_config(),
+        &app_config,
         stream,
         Arc::clone(&status_model),
         database,
-    )
-    .run()
-    .await;
+    );
+    assert_eq!(runtime.pre_event_seconds, 10);
+    assert_eq!(runtime.post_event_seconds, 20);
+    assert_eq!(runtime.clips_directory.to_string_lossy(), "data/clips");
+    runtime.run().await;
 
     assert_eq!(
         status_model.get("front-door"),
@@ -53,4 +58,44 @@ async fn updates_status_from_the_camera_stream() {
             since: SystemTime::UNIX_EPOCH,
         })
     );
+}
+
+fn camera_config() -> camwatch::config::CameraConfig {
+    Config::parse(
+        r#"
+[app]
+bind_address = "127.0.0.1:8080"
+database_path = "data/camwatch.sqlite3"
+pre_event_seconds = 10
+post_event_seconds = 20
+rolling_buffer_seconds = 30
+
+[[cameras]]
+id = "front-door"
+name = "Front door"
+rtsp_url_env = "CAMWATCH_FRONT_DOOR_RTSP_URL"
+motion_min_area = 1000
+yolo_confidence = 0.5
+"#,
+    )
+    .expect("camera configuration should parse")
+    .cameras
+    .into_iter()
+    .next()
+    .expect("configuration should contain a camera")
+}
+
+fn app_config() -> AppConfig {
+    Config::parse(
+        r#"
+[app]
+bind_address = "127.0.0.1:8080"
+database_path = "data/camwatch.sqlite3"
+pre_event_seconds = 10
+post_event_seconds = 20
+rolling_buffer_seconds = 30
+"#,
+    )
+    .expect("app configuration should parse")
+    .app
 }
