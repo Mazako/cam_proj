@@ -1,6 +1,6 @@
 use opencv::{
     core::{self, Mat},
-    geometry, imgproc,
+    imgproc,
     video::{self, BackgroundSubtractorMOG2Trait},
 };
 
@@ -84,7 +84,7 @@ impl Mog2MotionDetector {
         let mut largest_area = 0.0;
         for contour in contours.iter() {
             let area =
-                geometry::contour_area(&contour, false).map_err(|_| MotionDetectorError::Failed)?;
+                imgproc::contour_area(&contour, false).map_err(|_| MotionDetectorError::Failed)?;
             if area >= MIN_MOTION_AREA && area > largest_area {
                 largest_area = area;
             }
@@ -100,14 +100,10 @@ impl MotionDetector for Mog2MotionDetector {
 
         if self.learning_frames_remaining > 0 {
             self.learning_frames_remaining -= 1;
-            return Ok(Motion {
-                largest_contour_area: 0.0,
-            });
+            return Ok(Motion::new(0.0));
         }
 
-        Ok(Motion {
-            largest_contour_area: self.largest_motion_area(&foreground_mask)?,
-        })
+        Ok(Motion::new(self.largest_motion_area(&foreground_mask)?))
     }
 
     fn reset(&mut self) -> Result<(), MotionDetectorError> {

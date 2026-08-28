@@ -1,3 +1,5 @@
+use derive_new::new;
+
 use super::Frame;
 
 pub trait MotionDetector: Send {
@@ -6,7 +8,7 @@ pub trait MotionDetector: Send {
     fn reset(&mut self) -> Result<(), MotionDetectorError>;
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, new)]
 pub struct Motion {
     pub largest_contour_area: f64,
 }

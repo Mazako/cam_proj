@@ -39,6 +39,7 @@ async fn updates_status_from_the_camera_stream() {
         ]),
     };
 
+    let (clip_sender, _clip_receiver) = tokio::sync::mpsc::unbounded_channel();
     let app_config = app_config();
     let runtime = CameraRuntime::new(
         camera_config(),
@@ -46,6 +47,7 @@ async fn updates_status_from_the_camera_stream() {
         stream,
         Arc::clone(&status_model),
         database,
+        clip_sender,
     );
     assert_eq!(runtime.pre_event_seconds, 10);
     assert_eq!(runtime.post_event_seconds, 20);

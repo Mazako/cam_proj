@@ -4,6 +4,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use derive_new::new;
 use gstreamer::{self as gst, prelude::*};
 use gstreamer_pbutils as gst_pbutils;
 use thiserror::Error;
@@ -14,7 +15,7 @@ use crate::{
     stream::escape_pipeline_value,
 };
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, new)]
 pub struct Clip {
     pub path: PathBuf,
     pub duration: Duration,
@@ -179,10 +180,7 @@ fn assemble_clip(segments: Vec<Segment>, output_path: PathBuf) -> Result<Clip, C
     let _ = pipeline.set_state(gst::State::Null);
     let duration = clip_duration(&output_path)?;
 
-    Ok(Clip {
-        path: output_path,
-        duration,
-    })
+    Ok(Clip::new(output_path, duration))
 }
 
 fn clip_duration(path: &Path) -> Result<Duration, ClipStoreError> {
@@ -195,4 +193,12 @@ fn clip_duration(path: &Path) -> Result<Duration, ClipStoreError> {
     let duration = info.duration().ok_or(ClipStoreError::ClipMetadata)?;
 
     Ok(Duration::from_nanos(duration.nseconds()))
+}
+
+#[derive(Debug, PartialEq, Eq, new)]
+pub struct ClipCreationEvent {
+    pub camera_id: String,
+    pub started_at: SystemTime,
+    pub ended_at: SystemTime,
+    pub path: PathBuf,
 }

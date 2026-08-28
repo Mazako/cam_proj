@@ -22,6 +22,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 url.workspace = true
 uuid.workspace = true
+derive-new = "0.7.0"
 
 [dev-dependencies]
 testcontainers = "0.28"

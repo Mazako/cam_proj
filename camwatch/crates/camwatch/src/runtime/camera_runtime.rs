@@ -4,8 +4,15 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use tokio::sync::mpsc;
+
 use crate::{
-    clips::{clip_store, store_segment}, config::{AppConfig, CameraConfig}, motion::Mog2MotionDetector, ports::{CameraStream, CameraStreamEvent, CameraStreamStatus, MotionDetector}, storage::{Database, unix_time_millis}, stream::CameraStatusModel,
+    clips::{clip_store::ClipCreationEvent, store_segment},
+    config::{AppConfig, CameraConfig},
+    motion::Mog2MotionDetector,
+    ports::{CameraStream, CameraStreamEvent, CameraStreamStatus, MotionDetector},
+    storage::{Database, unix_time_millis},
+    stream::CameraStatusModel,
 };
 
 pub struct CameraRuntime<S> {
@@ -17,6 +24,7 @@ pub struct CameraRuntime<S> {
     status_model: Arc<CameraStatusModel>,
     database: Database,
     motion_detector: Mog2MotionDetector,
+    clip_sender: mpsc::UnboundedSender<ClipCreationEvent>,
 }
 
 impl<S> CameraRuntime<S>
@@ -29,6 +37,7 @@ where
         stream: S,
         status_model: Arc<CameraStatusModel>,
         database: Database,
+        clip_sender: mpsc::UnboundedSender<ClipCreationEvent>,
     ) -> Self {
         let motion_detector = Mog2MotionDetector::new().unwrap();
         Self {
@@ -40,6 +49,7 @@ where
             status_model,
             database,
             motion_detector,
+            clip_sender,
         }
     }
 
@@ -95,19 +105,26 @@ where
                             .checked_add(Duration::from_secs(self.post_event_seconds))
                             .unwrap();
                         if ended_at >= post_time {
-                            let path = self.clips_directory
+                            let path = self
+                                .clips_directory
                                 .join(self.camera_config.id.as_str())
                                 .join(unix_time_millis(time).unwrap().to_string());
                             let pre_time = time
-                            .checked_sub(Duration::from_secs(self.pre_event_seconds))
-                            .unwrap();
-                        clip_store::create_clip(&self.database,
-                             self.camera_config.id.as_str(),
-                              pre_time,
-                               post_time,
-                                path).await.unwrap();
-                        current_detection = None;
-                        
+                                .checked_sub(Duration::from_secs(self.pre_event_seconds))
+                                .unwrap();
+                            if let Err(error) = self.clip_sender.send(ClipCreationEvent::new(
+                                self.camera_config.id.as_str().to_string(),
+                                pre_time,
+                                post_time,
+                                path,
+                            )) {
+                                tracing::error!(
+                                    camera_id = self.camera_config.id.as_str(),
+                                    %error,
+                                    "clip creation event could not be queued"
+                                );
+                            }
+                            current_detection = None;
                         }
                     }
                 }

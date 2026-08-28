@@ -16,6 +16,8 @@ use gstreamer_app::{self as gst_app};
 use tokio::sync::mpsc;
 use url::Url;
 
+use derive_new::new;
+
 use crate::ports::{
     CameraStream, CameraStreamError, CameraStreamEvent, CameraStreamStatus, Frame, PixelFormat,
     PortFuture,
@@ -25,19 +27,14 @@ use super::{RtspCodec, SegmentRecordingConfig, build_pipeline};
 
 const EVENT_BUFFER_CAPACITY: usize = 8;
 
+#[derive(new)]
 struct SegmentTimes {
     pipeline_started_at: SystemTime,
+    #[new(default)]
     opened_at: HashMap<PathBuf, SystemTime>,
 }
 
 impl SegmentTimes {
-    fn new(pipeline_started_at: SystemTime) -> Self {
-        Self {
-            pipeline_started_at,
-            opened_at: HashMap::new(),
-        }
-    }
-
     fn handle(&mut self, element: &gst::message::Element) -> Option<CameraStreamEvent> {
         let structure = element.structure()?;
         let location = structure.get::<String>("location").ok()?;
