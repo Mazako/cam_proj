@@ -25,4 +25,5 @@ uuid.workspace = true
 derive-new = "0.7.0"
 
 [dev-dependencies]
+opencv.workspace = true
 testcontainers = "0.28"
