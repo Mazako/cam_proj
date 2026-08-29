@@ -9,8 +9,8 @@ use tokio::sync::mpsc;
 use crate::{
     clips::{clip_store::ClipCreationEvent, store_segment},
     config::{AppConfig, CameraConfig},
-    motion::Mog2MotionDetector,
-    ports::{CameraStream, CameraStreamEvent, CameraStreamStatus, MotionDetector},
+    motion::{Mog2MotionDetector, YoloAnalyzer},
+    ports::{CameraStream, CameraStreamEvent, CameraStreamStatus, Frame, MotionDetector},
     storage::{Database, unix_time_millis},
     stream::CameraStatusModel,
 };
@@ -25,6 +25,8 @@ pub struct CameraRuntime<S> {
     database: Database,
     motion_detector: Mog2MotionDetector,
     clip_sender: mpsc::UnboundedSender<ClipCreationEvent>,
+    active_clip: Option<ActiveClip>,
+    yolo_analyzer: Option<YoloAnalyzer>,
 }
 
 impl<S> CameraRuntime<S>
@@ -40,6 +42,11 @@ where
         clip_sender: mpsc::UnboundedSender<ClipCreationEvent>,
     ) -> Self {
         let motion_detector = Mog2MotionDetector::new().unwrap();
+        let yolo_analyzer = if camera_config.clip_after_motion {
+            None
+        } else {
+            Some(YoloAnalyzer::new(camera_config.yolo_confidence).unwrap())
+        };
         Self {
             pre_event_seconds: u64::from(app_config.pre_event_seconds),
             post_event_seconds: u64::from(app_config.post_event_seconds),
@@ -50,11 +57,12 @@ where
             database,
             motion_detector,
             clip_sender,
+            active_clip: None,
+            yolo_analyzer,
         }
     }
 
     pub async fn run(mut self) {
-        let mut current_detection: Option<SystemTime> = None;
         loop {
             match self.stream.next_event().await {
                 Ok(CameraStreamEvent::Status(status)) => {
@@ -75,16 +83,26 @@ where
                         }
                     }
                 }
-                Ok(CameraStreamEvent::Frame(frame)) => {
-                    let detection = self.motion_detector.detect(&frame).unwrap();
-                    if detection.largest_contour_area > 0.0 {
-                        match current_detection {
-                            Some(_) => {}
-                            None => current_detection = Some(SystemTime::now()),
+                Ok(CameraStreamEvent::Frame(frame)) => match &mut self.active_clip {
+                    Some(_) => {}
+                    None => {
+                        let clip_triggered = if self.camera_config.clip_after_motion {
+                            self.is_motion_detected(&frame)
+                        } else {
+                            self.is_motion_detected(&frame) && self.is_yolo_motion_detected(&frame)
+                        };
+                        if clip_triggered {
+                            let started_at = frame.captured_at;
+                            let path = self.create_clip_path(started_at);
+                            self.active_clip = Some(ActiveClip::new(
+                                started_at,
+                                Duration::from_secs(self.pre_event_seconds),
+                                Duration::from_secs(self.post_event_seconds),
+                                path,
+                            ));
                         }
-                        tracing::info!("MOTION DETECTED :D");
                     }
-                }
+                },
                 Ok(CameraStreamEvent::SegmentFinalized {
                     path,
                     started_at,
@@ -100,32 +118,14 @@ where
                     .await
                     {
                         tracing::warn!(camera_id = self.camera_config.id.as_str(), %error, "segment could not be stored");
-                    } else if let Some(time) = current_detection {
-                        let post_time = time
-                            .checked_add(Duration::from_secs(self.post_event_seconds))
-                            .unwrap();
-                        if ended_at >= post_time {
-                            let path = self
-                                .clips_directory
-                                .join(self.camera_config.id.as_str())
-                                .join(unix_time_millis(time).unwrap().to_string());
-                            let pre_time = time
-                                .checked_sub(Duration::from_secs(self.pre_event_seconds))
-                                .unwrap();
-                            if let Err(error) = self.clip_sender.send(ClipCreationEvent::new(
-                                self.camera_config.id.as_str().to_string(),
-                                pre_time,
-                                post_time,
-                                path,
-                            )) {
-                                tracing::error!(
-                                    camera_id = self.camera_config.id.as_str(),
-                                    %error,
-                                    "clip creation event could not be queued"
-                                );
-                            }
-                            current_detection = None;
+                    } else if let Some(clip) = &self.active_clip
+                        && clip.is_sufficient(ended_at)
+                    {
+                        let event = clip.to_event(self.camera_config.id.as_str().to_owned());
+                        if let Err(error) = self.clip_sender.send(event) {
+                            tracing::warn!(camera_id = self.camera_config.id.as_str(), %error, "clip could not be sent to the clip worker");
                         }
+                        self.active_clip = None;
                     }
                 }
                 Err(_) => {
@@ -137,5 +137,56 @@ where
                 }
             }
         }
+    }
+
+    fn create_clip_path(&self, started_at: SystemTime) -> PathBuf {
+        let filename = format!("{}.mp4", unix_time_millis(started_at).unwrap());
+        self.clips_directory
+            .join(self.camera_config.id.as_str())
+            .join(filename)
+    }
+
+    fn is_motion_detected(&mut self, frame: &Frame) -> bool {
+        let detection = self.motion_detector.detect(frame).unwrap();
+        detection.largest_contour_area > 0.0
+    }
+
+    fn is_yolo_motion_detected(&mut self, frame: &Frame) -> bool {
+        let Some(yolo_analyzer) = self.yolo_analyzer.as_mut() else {
+            return false;
+        };
+        let detections = yolo_analyzer.analyze(frame).unwrap();
+        !detections.is_empty()
+    }
+}
+
+struct ActiveClip {
+    pub started_at: SystemTime,
+    pub ended_at: SystemTime,
+    pub path: PathBuf,
+}
+
+impl ActiveClip {
+    fn new(
+        detected_at: SystemTime,
+        pre_duration: Duration,
+        post_duration: Duration,
+        path: PathBuf,
+    ) -> Self {
+        let started_at = detected_at.checked_sub(pre_duration).unwrap();
+        let ended_at = detected_at.checked_add(post_duration).unwrap();
+        Self {
+            started_at,
+            ended_at,
+            path,
+        }
+    }
+
+    fn to_event(&self, camera_id: String) -> ClipCreationEvent {
+        ClipCreationEvent::new(camera_id, self.started_at, self.ended_at, self.path.clone())
+    }
+
+    fn is_sufficient(&self, time: SystemTime) -> bool {
+        time >= self.ended_at
     }
 }

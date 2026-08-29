@@ -17,6 +17,7 @@ onvif_url = "http://192.168.1.65:2020/onvif/device_service"
 onvif_credentials_env = "CAMWATCH_FRONT_DOOR_ONVIF_CREDENTIALS"
 motion_min_area = 1000
 yolo_confidence = 0.5
+clip_after_motion = false
 "#;
 
 #[test]
@@ -32,6 +33,7 @@ fn parses_a_configuration_with_a_camera() {
     );
     assert_eq!(config.app.clips_directory.to_string_lossy(), "data/clips");
     assert_eq!(config.app.segment_rotation_seconds, 2);
+    assert!(!config.cameras[0].clip_after_motion);
 }
 
 #[test]
@@ -41,6 +43,15 @@ fn defaults_camera_codec_to_h264() {
     let config = Config::parse(&input).expect("configuration should default to H.264");
 
     assert_eq!(config.cameras[0].rtsp_codec, RtspCodec::H264);
+}
+
+#[test]
+fn defaults_clip_after_motion_to_true() {
+    let input = VALID_CONFIG.replace("clip_after_motion = false\n", "");
+
+    let config = Config::parse(&input).expect("configuration should load");
+
+    assert!(config.cameras[0].clip_after_motion);
 }
 
 #[test]

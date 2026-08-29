@@ -16,6 +16,12 @@ pub struct CameraConfig {
     pub onvif_credentials_env: Option<EnvironmentVariableName>,
     pub motion_min_area: u32,
     pub yolo_confidence: f32,
+    #[serde(default = "default_clip_after_motion")]
+    pub clip_after_motion: bool,
+}
+
+fn default_clip_after_motion() -> bool {
+    true
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
