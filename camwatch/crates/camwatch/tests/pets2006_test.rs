@@ -94,14 +94,14 @@ fn load_frame(path: &Path) -> Frame {
         path.display()
     );
 
-    Frame {
-        data: image
+    Frame::new(
+        image
             .data_bytes()
             .expect("decoded image should be continuous")
             .to_vec(),
-        width: u32::try_from(image.cols()).expect("frame width should fit u32"),
-        height: u32::try_from(image.rows()).expect("frame height should fit u32"),
-        pixel_format: PixelFormat::Bgr8,
-        captured_at: SystemTime::UNIX_EPOCH,
-    }
+        u32::try_from(image.cols()).expect("frame width should fit u32"),
+        u32::try_from(image.rows()).expect("frame height should fit u32"),
+        PixelFormat::Bgr8,
+        SystemTime::UNIX_EPOCH,
+    )
 }

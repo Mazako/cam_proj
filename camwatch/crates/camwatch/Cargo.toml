@@ -23,6 +23,8 @@ tracing-subscriber.workspace = true
 url.workspace = true
 uuid.workspace = true
 derive-new = "0.7.0"
+ort = { version = "=2.0.0-rc.13", features = ["ndarray"] }
+ndarray = "0.17.2"
 
 [dev-dependencies]
 opencv.workspace = true

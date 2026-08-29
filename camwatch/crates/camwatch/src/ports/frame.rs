@@ -1,8 +1,9 @@
+use derive_new::new;
 use std::time::SystemTime;
 
 use opencv::core::{Mat, Vec3b};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, new)]
 pub struct Frame {
     pub data: Vec<u8>,
     pub width: u32,

@@ -226,11 +226,11 @@ fn frame_from_sample(sample: gst::Sample) -> Result<Frame, ()> {
     let buffer = sample.buffer().ok_or(())?;
     let map = buffer.map_readable().map_err(|_| ())?;
 
-    Ok(Frame {
-        data: map.as_slice().to_vec(),
-        width: width.try_into().map_err(|_| ())?,
-        height: height.try_into().map_err(|_| ())?,
-        pixel_format: PixelFormat::Bgr8,
-        captured_at: SystemTime::now(),
-    })
+    Ok(Frame::new(
+        map.as_slice().to_vec(),
+        width.try_into().map_err(|_| ())?,
+        height.try_into().map_err(|_| ())?,
+        PixelFormat::Bgr8,
+        SystemTime::now(),
+    ))
 }
