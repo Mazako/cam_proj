@@ -13,12 +13,7 @@ use super::support::{
 
 #[tokio::test]
 async fn detects_motion_from_a_live_rtsp_stream() {
-    let Some(dataset) = pets2006_dataset() else {
-        eprintln!(
-            "skipping PETS2006 RTSP motion test; put the dataset in tests/resources/PETS2006 or set CAMWATCH_PETS2006"
-        );
-        return;
-    };
+    let dataset = pets2006_dataset();
 
     let directory = tempdir().expect("temporary directory should exist");
     let video_path = directory.path().join("pets2006.mp4");

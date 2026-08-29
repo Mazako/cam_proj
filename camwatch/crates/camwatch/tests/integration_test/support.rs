@@ -216,18 +216,22 @@ pub async fn database_with_camera(directory: &Path) -> Database {
     database
 }
 
-pub fn pets2006_dataset() -> Option<PathBuf> {
+pub fn pets2006_dataset() -> PathBuf {
     if let Some(path) = env::var_os("CAMWATCH_PETS2006") {
         let dataset = PathBuf::from(path);
         assert!(
             dataset.join("input").is_dir(),
             "CAMWATCH_PETS2006 must point to a PETS2006 dataset with an input directory"
         );
-        return Some(dataset);
+        return dataset;
     }
 
     let dataset = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/resources/PETS2006");
-    dataset.join("input").is_dir().then_some(dataset)
+    assert!(
+        dataset.join("input").is_dir(),
+        "PETS2006 dataset is required; put it in tests/resources/PETS2006 or set CAMWATCH_PETS2006"
+    );
+    dataset
 }
 
 pub fn assemble_pets2006_mp4(dataset: &Path, output: &Path) {

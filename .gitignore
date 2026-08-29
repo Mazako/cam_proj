@@ -12,6 +12,3 @@ target/
 
 # Virtual environments
 .venv
-
-# Local PETS2006 fixture (too large for git)
-camwatch/crates/camwatch/tests/resources/PETS2006

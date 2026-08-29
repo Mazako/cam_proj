@@ -16,12 +16,7 @@ const MOTION_WINDOW_END: usize = 400;
 
 #[test]
 fn detects_motion_on_pets2006_after_background_learning() {
-    let Some(dataset) = pets2006_dataset() else {
-        eprintln!(
-            "skipping PETS2006 motion test; put the dataset in tests/resources/PETS2006 or set CAMWATCH_PETS2006"
-        );
-        return;
-    };
+    let dataset = pets2006_dataset();
 
     let frames = input_frames(&dataset);
     assert!(
@@ -59,18 +54,22 @@ fn detects_motion_on_pets2006_after_background_learning() {
     );
 }
 
-fn pets2006_dataset() -> Option<PathBuf> {
+fn pets2006_dataset() -> PathBuf {
     if let Some(path) = env::var_os("CAMWATCH_PETS2006") {
         let dataset = PathBuf::from(path);
         assert!(
             dataset.join("input").is_dir(),
             "CAMWATCH_PETS2006 must point to a PETS2006 dataset with an input directory"
         );
-        return Some(dataset);
+        return dataset;
     }
 
     let dataset = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/resources/PETS2006");
-    dataset.join("input").is_dir().then_some(dataset)
+    assert!(
+        dataset.join("input").is_dir(),
+        "PETS2006 dataset is required; put it in tests/resources/PETS2006 or set CAMWATCH_PETS2006"
+    );
+    dataset
 }
 
 fn input_frames(dataset: &Path) -> Vec<PathBuf> {
