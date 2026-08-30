@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use camwatch::{
-    clips::clip_store::ClipCreationEvent,
+    clips::{ClipJob, ClipManager},
     config::{AppConfig, CameraConfig, Config},
     runtime::CameraRuntime,
     stream::CameraStatusModel,
@@ -28,7 +28,7 @@ async fn queues_clip_when_motion_and_yolo_are_required() {
     assert!(event.ended_at > event.started_at);
 }
 
-async fn run_runtime_until_clip(clip_after_motion: bool) -> ClipCreationEvent {
+async fn run_runtime_until_clip(clip_after_motion: bool) -> ClipJob {
     let dataset = pets2006_dataset();
     let directory = tempdir().expect("temporary directory should exist");
     let video_path = directory.path().join("pets2006.mp4");
@@ -38,13 +38,19 @@ async fn run_runtime_until_clip(clip_after_motion: bool) -> ClipCreationEvent {
     let session = RtspSession::start("runtime", Some(&video_path)).await;
     let stream = camera_stream(session.url.clone(), directory.path());
     let (clip_sender, mut clip_receiver) = tokio::sync::mpsc::unbounded_channel();
+    let app_config = app_config();
+    let clip_manager = Arc::new(ClipManager::new(
+        database.clone(),
+        clip_sender,
+        app_config.clips_directory.clone(),
+    ));
     let runtime = CameraRuntime::new(
         camera_config(clip_after_motion),
-        &app_config(),
+        &app_config,
         stream,
         Arc::new(CameraStatusModel::default()),
         database,
-        clip_sender,
+        clip_manager,
     );
     let runtime_task = tokio::spawn(runtime.run());
 

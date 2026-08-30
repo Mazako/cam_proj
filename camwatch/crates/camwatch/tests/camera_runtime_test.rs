@@ -6,6 +6,7 @@ use std::{
 };
 
 use camwatch::{
+    clips::ClipManager,
     config::{AppConfig, Config},
     ports::{
         CameraStream, CameraStreamError, CameraStreamEvent, CameraStreamStatus, Frame, PixelFormat,
@@ -47,19 +48,23 @@ async fn updates_status_from_the_camera_stream() {
         ]),
     };
 
-    let (clip_sender, _clip_receiver) = tokio::sync::mpsc::unbounded_channel();
     let app_config = app_config();
+    let (clip_sender, _clip_receiver) = tokio::sync::mpsc::unbounded_channel();
+    let clip_manager = Arc::new(ClipManager::new(
+        database.clone(),
+        clip_sender,
+        app_config.clips_directory.clone(),
+    ));
     let runtime = CameraRuntime::new(
         camera_config(),
         &app_config,
         stream,
         Arc::clone(&status_model),
         database,
-        clip_sender,
+        clip_manager,
     );
     assert_eq!(runtime.pre_event_seconds, 10);
     assert_eq!(runtime.post_event_seconds, 20);
-    assert_eq!(runtime.clips_directory.to_string_lossy(), "data/clips");
     runtime.run().await;
 
     assert_eq!(
@@ -128,13 +133,18 @@ async fn queues_clip_with_pre_and_post_window() {
 
     let stream = FakeCameraStream { events };
     let (clip_sender, mut clip_receiver) = tokio::sync::mpsc::unbounded_channel();
+    let clip_manager = Arc::new(ClipManager::new(
+        database.clone(),
+        clip_sender,
+        app_config().clips_directory,
+    ));
     let runtime = CameraRuntime::new(
         camera_config(),
         &app_config(),
         stream,
         Arc::new(CameraStatusModel::default()),
         database,
-        clip_sender,
+        Arc::clone(&clip_manager),
     );
     runtime.run().await;
 
@@ -149,6 +159,12 @@ async fn queues_clip_with_pre_and_post_window() {
     );
     assert_eq!(clip.ended_at, motion_detected_at + Duration::from_secs(20));
     assert!(clip.path.to_string_lossy().ends_with(".mp4"));
+    assert_eq!(clip.segments.len(), 1);
+
+    let reserved_path = clip.segments[0].path.clone();
+    assert!(clip_manager.is_segment_reserved(&reserved_path));
+    drop(clip);
+    assert!(!clip_manager.is_segment_reserved(&reserved_path));
 }
 
 fn camera_config() -> camwatch::config::CameraConfig {

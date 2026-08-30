@@ -59,7 +59,7 @@ pub async fn store_segment(
     segment_path: PathBuf,
     started_at: SystemTime,
     ended_at: SystemTime,
-) -> Result<(), ClipStoreError> {
+) -> Result<Segment, ClipStoreError> {
     let started_at = unix_time_millis(started_at).ok_or(ClipStoreError::InvalidTimeRange)?;
     let ended_at = unix_time_millis(ended_at).ok_or(ClipStoreError::InvalidTimeRange)?;
     if ended_at < started_at {
@@ -76,7 +76,7 @@ pub async fn store_segment(
         .try_into()
         .map_err(|_| ClipStoreError::FileMetadata(std::io::Error::other("file is too large")))?;
 
-    database
+    let result = database
         .upsert_segment(NewSegment {
             camera_id: camera_id.to_owned(),
             path,
@@ -86,7 +86,7 @@ pub async fn store_segment(
         })
         .await?;
 
-    Ok(())
+    Ok(result)
 }
 
 pub async fn create_clip(
@@ -105,6 +105,17 @@ pub async fn create_clip(
     let segments = database
         .segments_overlapping(camera_id, started_at, ended_at)
         .await?;
+    if segments.is_empty() {
+        return Err(ClipStoreError::NoSegments);
+    }
+
+    create_clip_from_segments(segments, output_path).await
+}
+
+pub(crate) async fn create_clip_from_segments(
+    segments: Vec<Segment>,
+    output_path: PathBuf,
+) -> Result<Clip, ClipStoreError> {
     if segments.is_empty() {
         return Err(ClipStoreError::NoSegments);
     }
@@ -193,12 +204,4 @@ fn clip_duration(path: &Path) -> Result<Duration, ClipStoreError> {
     let duration = info.duration().ok_or(ClipStoreError::ClipMetadata)?;
 
     Ok(Duration::from_nanos(duration.nseconds()))
-}
-
-#[derive(Debug, PartialEq, Eq, new)]
-pub struct ClipCreationEvent {
-    pub camera_id: String,
-    pub started_at: SystemTime,
-    pub ended_at: SystemTime,
-    pub path: PathBuf,
 }

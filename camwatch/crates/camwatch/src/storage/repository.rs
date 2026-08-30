@@ -107,10 +107,10 @@ impl Database {
         Ok(event)
     }
 
-    pub async fn upsert_segment(&self, segment: NewSegment) -> Result<(), StorageError> {
+    pub async fn upsert_segment(&self, segment: NewSegment) -> Result<Segment, StorageError> {
         let now = unix_time_millis(SystemTime::now()).unwrap_or_default();
 
-        sqlx::query(
+        let result = sqlx::query_as::<_, Segment>(
             "INSERT INTO segments (
                 path, camera_id, started_at, ended_at, size_bytes, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -119,7 +119,8 @@ impl Database {
                 started_at = excluded.started_at,
                 ended_at = excluded.ended_at,
                 size_bytes = excluded.size_bytes,
-                updated_at = excluded.updated_at",
+                updated_at = excluded.updated_at
+                RETURNING camera_id, path, started_at, ended_at, size_bytes",
         )
         .bind(&segment.path)
         .bind(&segment.camera_id)
@@ -128,11 +129,11 @@ impl Database {
         .bind(segment.size_bytes)
         .bind(now)
         .bind(now)
-        .execute(&self.pool)
+        .fetch_one(&self.pool)
         .await
         .map_err(StorageError::Database)?;
 
-        Ok(())
+        Ok(result)
     }
 
     pub async fn segments_overlapping(

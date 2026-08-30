@@ -4,7 +4,7 @@ use clap::Parser;
 use tracing_subscriber::EnvFilter;
 
 use camwatch::{
-    clips::create_clip_worker,
+    clips::{ClipManager, create_clip_worker},
     config::{CameraConfig, Config},
     runtime::CameraRuntime,
     storage::{Database, NewCamera},
@@ -69,7 +69,12 @@ async fn main() {
 
     let status_model = Arc::new(CameraStatusModel::default());
     let has_cameras = !config.cameras.is_empty();
-    let clip_sender = create_clip_worker(database.clone());
+    let clip_sender = create_clip_worker();
+    let clip_manager = Arc::new(ClipManager::new(
+        database.clone(),
+        clip_sender,
+        config.app.clips_directory.clone(),
+    ));
     for camera in config.cameras {
         let recording = SegmentRecordingConfig::new(
             config.app.segment_directory.join(camera.id.as_str()),
@@ -88,7 +93,7 @@ async fn main() {
                         stream,
                         Arc::clone(&status_model),
                         database.clone(),
-                        clip_sender.clone(),
+                        Arc::clone(&clip_manager),
                     )
                     .run(),
                 );

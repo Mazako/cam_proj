@@ -1,27 +1,27 @@
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
-use super::{clip_store::ClipCreationEvent, create_clip};
-use crate::storage::Database;
+use super::{clip_manager::ClipJob, clip_store::create_clip_from_segments};
 
-pub fn create_clip_worker(db: Database) -> UnboundedSender<ClipCreationEvent> {
+pub fn create_clip_worker() -> UnboundedSender<ClipJob> {
     let (tx, rx) = mpsc::unbounded_channel();
-    tokio::spawn(run_worker(rx, db));
+    tokio::spawn(run_worker(rx));
     tx
 }
 
-async fn run_worker(mut rx: UnboundedReceiver<ClipCreationEvent>, db: Database) {
-    while let Some(event) = rx.recv().await {
-        if let Err(error) = create_clip(
-            &db,
-            &event.camera_id,
-            event.started_at,
-            event.ended_at,
-            event.path,
-        )
-        .await
-        {
+async fn run_worker(mut rx: UnboundedReceiver<ClipJob>) {
+    while let Some(job) = rx.recv().await {
+        let ClipJob {
+            camera_id,
+            started_at: _,
+            ended_at: _,
+            path,
+            segments,
+            _lease,
+        } = job;
+
+        if let Err(error) = create_clip_from_segments(segments, path).await {
             tracing::error!(
-                camera_id = event.camera_id.as_str(),
+                camera_id = camera_id.as_str(),
                 %error,
                 "clip could not be created"
             );
