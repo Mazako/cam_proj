@@ -8,7 +8,7 @@ Każdy task jest powiązany z wymaganiami z [dokumentu przewodniego](README.md).
 - Wszystkie operacje I/O są asynchroniczne lub wykonywane na wydzielonych workerach.
 - Żaden sekret nie trafia do kodu, konfiguracji wersjonowanej ani logów.
 - Każdy moduł ma jawne błędy domenowe i logi strukturalne.
-- Elementy RTSP, ONVIF i Google Drive otrzymują adaptery, aby testy nie wymagały prawdziwej kamery ani konta Google.
+- Elementy RTSP, ONVIF i Cloudflare R2 otrzymują adaptery, aby testy nie wymagały prawdziwej kamery ani dostępu do bucketa R2.
 
 ## Etap 0 — fundament projektu
 
@@ -46,12 +46,12 @@ Każdy task jest powiązany z wymaganiami z [dokumentu przewodniego](README.md).
 
 **Pokrywa:** wszystkie FR
 
-**Zakres:** interfejsy `CameraStream`, `MotionDetector`, `PersonDetector`, `ClipStore`, `DriveUploader`, `PtzController` i ich implementacje testowe.
+**Zakres:** interfejsy `CameraStream`, `MotionDetector`, `PersonDetector`, `ClipStore`, `R2Uploader`, `PtzController` i ich implementacje testowe.
 
 **Kryteria akceptacji:**
 
 - Silnik zdarzeń można uruchomić z fałszywą kamerą i fałszywym uploaderem.
-- Kod domenowy nie importuje bezpośrednio GStreamera, ONVIF ani HTTP Google.
+- Kod domenowy nie importuje bezpośrednio GStreamera, ONVIF ani klienta S3/R2.
 
 **Zależności:** ARC-01, ARC-02.
 
@@ -161,21 +161,21 @@ Każdy task jest powiązany z wymaganiami z [dokumentu przewodniego](README.md).
 
 **Zależności:** ARC-03.
 
-### GDR-01: Konfiguracja Google OAuth i folderu docelowego
+### R2-01: Konfiguracja Cloudflare R2 i bucketa docelowego
 
 **Pokrywa:** FR-07, NFR-03
 
-**Zakres:** lokalny flow OAuth, bezpieczne zapisanie tokenu odświeżania i wybór folderu Drive.
+**Zakres:** konfiguracja endpointu S3 R2, bucketa, prefiksu obiektów oraz bezpieczne wskazanie klucza dostępu i sekretu.
 
 **Kryteria akceptacji:**
 
-- Użytkownik przechodzi autoryzację w przeglądarce tylko podczas konfiguracji.
-- Token nie jest zapisywany w repozytorium, logach ani jawnej konfiguracji.
-- Aplikacja potrafi zweryfikować dostęp do wybranego folderu.
+- Aplikacja potrafi zweryfikować dostęp do skonfigurowanego bucketa.
+- Klucze dostępu nie są zapisywane w repozytorium, logach ani jawnej konfiguracji.
+- Aplikacja odrzuca konfigurację bez endpointu, bucketa lub wymaganych referencji sekretów.
 
 **Zależności:** ARC-01.
 
-### GDR-02: Kolejka uploadów MP4
+### R2-02: Kolejka uploadów MP4
 
 **Pokrywa:** FR-07, NFR-05
 
@@ -183,11 +183,11 @@ Każdy task jest powiązany z wymaganiami z [dokumentu przewodniego](README.md).
 
 **Kryteria akceptacji:**
 
-- Ukończony klip jest wysyłany do właściwego folderu Drive.
+- Ukończony klip jest wysyłany do właściwego bucketa R2 i prefiksu obiektów.
 - Awaria sieci oznacza `upload_failed` lub `upload_pending`, bez usunięcia pliku lokalnego.
 - Po przywróceniu sieci upload zostaje wznowiony bez interwencji użytkownika.
 
-**Zależności:** ARC-02, GDR-01, VID-03, EVT-01.
+**Zależności:** ARC-02, R2-01, VID-03, EVT-01.
 
 ## Etap 4 — panel WWW
 
@@ -229,7 +229,7 @@ Każdy task jest powiązany z wymaganiami z [dokumentu przewodniego](README.md).
 
 - Użytkownik widzi status każdej kamery i jej aktualny podgląd.
 - Użytkownik może odtworzyć klip zdarzenia.
-- Widok pokazuje typ zdarzenia, liczbę osób i status Drive.
+- Widok pokazuje typ zdarzenia, liczbę osób i status R2.
 
 **Zależności:** ARC-02, VID-04, EVT-01, WEB-01.
 
@@ -261,13 +261,13 @@ Każdy task jest powiązany z wymaganiami z [dokumentu przewodniego](README.md).
 - Przekroczenie limitu dysku nie usuwa klipów oczekujących na upload.
 - Log pozwala ustalić przyczynę nieudanego uploadu i reconnectu.
 
-**Zależności:** VID-01, VID-03, GDR-02.
+**Zależności:** VID-01, VID-03, R2-02.
 
 ### TST-01: Testy integracyjne oraz test odbiorczy MVP
 
 **Pokrywa:** wszystkie FR i NFR
 
-**Zakres:** fałszywy RTSP/ONVIF/Drive, scenariusze e2e i ręczna checklista z prawdziwą kamerą Tapo.
+**Zakres:** fałszywy RTSP/ONVIF/R2, scenariusze e2e i ręczna checklista z prawdziwą kamerą Tapo.
 
 **Kryteria akceptacji:**
 
@@ -280,4 +280,4 @@ Każdy task jest powiązany z wymaganiami z [dokumentu przewodniego](README.md).
 
 ## Kolejność pierwszego wdrożenia
 
-`ARC-01 → ARC-02 → ARC-03 → VID-01 → VID-02 → DET-01 → DET-02 → VID-03 → EVT-01 → GDR-01 → GDR-02 → WEB-01 → VID-04 → WEB-02 → ONV-01 → WEB-03 → OPS-01 → TST-01`
+`ARC-01 → ARC-02 → ARC-03 → VID-01 → VID-02 → DET-01 → DET-02 → VID-03 → EVT-01 → R2-01 → R2-02 → WEB-01 → VID-04 → WEB-02 → ONV-01 → WEB-03 → OPS-01 → TST-01`

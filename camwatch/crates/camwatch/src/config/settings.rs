@@ -51,6 +51,28 @@ impl Config {
                 "segment_rotation_seconds cannot exceed rolling_buffer_seconds",
             ));
         }
+        if self.app.r2_enabled {
+            if self.app.r2_endpoint_env.is_none() {
+                return Err(ConfigError::Validation(
+                    "r2_endpoint_env is required when r2_enabled is true",
+                ));
+            }
+            if self.app.r2_access_key_id_env.is_none() {
+                return Err(ConfigError::Validation(
+                    "r2_access_key_id_env is required when r2_enabled is true",
+                ));
+            }
+            if self.app.r2_secret_access_key_env.is_none() {
+                return Err(ConfigError::Validation(
+                    "r2_secret_access_key_env is required when r2_enabled is true",
+                ));
+            }
+            if self.app.r2_bucket_env.is_none() {
+                return Err(ConfigError::Validation(
+                    "r2_bucket_env is required when r2_enabled is true",
+                ));
+            }
+        }
 
         let mut camera_ids = std::collections::HashSet::new();
         for camera in &self.cameras {

@@ -2,7 +2,7 @@
 
 ## Cel
 
-Camwatch to lokalna aplikacja Rust do nadzorowania kamer sieciowych. Odbiera obraz RTSP, wykrywa ruch, potwierdza obecność osoby przez model YOLO, zapisuje klipy ze zdarzeń i wysyła je do skonfigurowanego folderu Google Drive. Udostępnia też chroniony hasłem panel WWW z podglądem kamer i sterowaniem PTZ.
+Camwatch to lokalna aplikacja Rust do nadzorowania kamer sieciowych. Odbiera obraz RTSP, wykrywa ruch, potwierdza obecność osoby przez model YOLO, zapisuje klipy ze zdarzeń i wysyła je do skonfigurowanego bucketa Cloudflare R2. Udostępnia też chroniony hasłem panel WWW z podglądem kamer i sterowaniem PTZ.
 
 Pierwsza wersja jest przeznaczona dla jednej do czterech kamer Tapo w tej samej sieci LAN oraz dla jednego użytkownika administracyjnego.
 
@@ -19,7 +19,7 @@ Pierwsza wersja jest przeznaczona dla jednej do czterech kamer Tapo w tej samej 
 4. Wykrywanie osób przez YOLO uruchamiane wyłącznie po wykryciu ruchu.
 5. Rotacyjny bufor nagrań obejmujący ostatnie `X` sekund.
 6. Klip MP4 zawierający materiał sprzed oraz po zdarzeniu.
-7. Asynchroniczna wysyłka klipu do Google Drive z ponawianiem po błędzie.
+7. Asynchroniczna wysyłka klipu do Cloudflare R2 z ponawianiem po błędzie.
 8. Panel WWW: logowanie, lista kamer, podgląd HLS, PTZ i historia zdarzeń.
 
 ## Poza zakresem MVP
@@ -42,7 +42,7 @@ flowchart LR
     Motion --> Events["Silnik zdarzeń"]
     Yolo --> Events
     Events --> Clips["Klip MP4: pre + post"]
-    Clips --> Upload["Kolejka Google Drive"]
+    Clips --> Upload["Kolejka Cloudflare R2"]
     Ingest --> Hls["HLS dla WWW"]
     Hls --> Web["Panel WWW"]
     Web --> Ptz["ONVIF PTZ"]
@@ -61,7 +61,7 @@ Aplikacja jest jednym procesem Rust z modułami, a nie zbiorem mikroserwisów. K
 | PTZ | klient ONVIF | Odczyt profilu kamery oraz komendy ruchu i zatrzymania |
 | HTTP i WWW | `axum` | API, sesje, HLS i prosty panel |
 | Metadane | SQLite przez `sqlx` | Kamery, zdarzenia, uploady i stan retry |
-| Google Drive | OAuth 2.0 + Drive API | Autoryzacja i odporna wysyłka MP4 |
+| Cloudflare R2 | S3-compatible API | Autoryzacja i odporna wysyłka MP4 |
 
 ## Przepływ zdarzenia
 
@@ -71,7 +71,7 @@ Aplikacja jest jednym procesem Rust z modułami, a nie zbiorem mikroserwisów. K
 4. Silnik zdarzeń rozpoczyna lub rozszerza zdarzenie typu `motion`; wynik YOLO dodaje etykietę `person` i pewność.
 5. Po okresie ciszy aplikacja kompletuję klip z segmentów `pre_event_seconds` przed zdarzeniem i `post_event_seconds` po nim.
 6. Klip jest zapisany lokalnie, odnotowany w SQLite i trafia do kolejki uploadu.
-7. Wysyłka do Google Drive działa w tle. Błąd nie usuwa lokalnego klipu i powoduje retry z narastającym opóźnieniem.
+7. Wysyłka do Cloudflare R2 działa w tle. Błąd nie usuwa lokalnego klipu i powoduje retry z narastającym opóźnieniem.
 
 ## Wymagania funkcjonalne
 
@@ -83,7 +83,7 @@ Aplikacja jest jednym procesem Rust z modułami, a nie zbiorem mikroserwisów. K
 | FR-04 | Po ruchu aplikacja wykonuje detekcję osób YOLO i zapisuje wynik w zdarzeniu. |
 | FR-05 | Aplikacja zachowuje konfigurowalny pre-buffer i tworzy MP4 z materiałem przed oraz po zdarzeniu. |
 | FR-06 | Zdarzenia są zapisywane lokalnie wraz z metadanymi i stanem uploadu. |
-| FR-07 | Aplikacja wysyła ukończone klipy MP4 do wybranego folderu Google Drive. |
+| FR-07 | Aplikacja wysyła ukończone klipy MP4 do skonfigurowanego bucketa Cloudflare R2, pod określonym prefiksem obiektów. |
 | FR-08 | Panel WWW wymaga hasła aplikacji przed dostępem do kamer i zdarzeń. |
 | FR-09 | Panel pokazuje podgląd każdej kamery w przeglądarce. |
 | FR-10 | Panel umożliwia PTZ dla kamer, które zgłaszają obsługę tej funkcji w ONVIF. |
@@ -94,14 +94,14 @@ Aplikacja jest jednym procesem Rust z modułami, a nie zbiorem mikroserwisów. K
 | --- | --- |
 | NFR-01 | Utrata RTSP jednej kamery nie może zatrzymać pozostałych kamer ani panelu WWW. |
 | NFR-02 | Klip zdarzenia nie może utracić materiału z okresu pre-bufferu po zwykłym restarcie procesu. |
-| NFR-03 | Hasła kamer, tokeny OAuth i hasło panelu nie mogą trafiać do logów ani zwykłego pliku konfiguracyjnego. |
+| NFR-03 | Hasła kamer, klucze dostępu R2 i hasło panelu nie mogą trafiać do logów ani zwykłego pliku konfiguracyjnego. |
 | NFR-04 | Panel domyślnie nasłuchuje na `127.0.0.1`; ekspozycja do LAN wymaga świadomej konfiguracji. |
-| NFR-05 | Wysyłka do Drive musi być odporna na chwilowy brak Internetu i możliwa do wznowienia. |
+| NFR-05 | Wysyłka do R2 musi być odporna na chwilowy brak Internetu i możliwa do wznowienia. |
 | NFR-06 | Aplikacja ma logować stan kamer, zdarzeń i uploadów w sposób wystarczający do diagnozy. |
 
 ## Konfiguracja docelowa
 
-Konfiguracja niesekretna będzie przechowywana w TOML. Sekrety będą wskazywane przez identyfikatory i odczytywane z systemowego keychaina albo lokalnego szyfrowanego magazynu.
+Konfiguracja niesekretna będzie przechowywana w TOML. Sekrety będą wskazywane przez nazwy zmiennych środowiskowych i odczytywane dopiero podczas uruchamiania aplikacji.
 
 ```toml
 [app]
@@ -109,6 +109,13 @@ bind_address = "127.0.0.1:8080"
 pre_event_seconds = 10
 post_event_seconds = 20
 rolling_buffer_seconds = 30
+r2_enabled = false
+r2_endpoint_env = "CAMWATCH_R2_ENDPOINT"
+r2_access_key_id_env = "CAMWATCH_R2_ACCESS_KEY_ID"
+r2_secret_access_key_env = "CAMWATCH_R2_SECRET_ACCESS_KEY"
+r2_bucket_env = "CAMWATCH_R2_BUCKET"
+r2_prefix_env = "CAMWATCH_R2_PREFIX"
+r2_region_env = "CAMWATCH_R2_REGION"
 
 [[cameras]]
 id = "front-door"
@@ -121,10 +128,21 @@ motion_min_area = 1000
 yolo_confidence = 0.50
 ```
 
+Nazwy zmiennych środowiskowych dla Cloudflare R2 są konfigurowane w TOML-u, natomiast ich wartości są pobierane z env. Przy `r2_enabled = false` worker uploadu nie jest uruchamiany.
+
+```text
+CAMWATCH_R2_ENDPOINT
+CAMWATCH_R2_ACCESS_KEY_ID
+CAMWATCH_R2_SECRET_ACCESS_KEY
+CAMWATCH_R2_BUCKET
+CAMWATCH_R2_PREFIX
+CAMWATCH_R2_REGION
+```
+
 ## Zasady bezpieczeństwa
 
 - Hasło panelu jest przechowywane wyłącznie jako hash Argon2id.
-- Token Google OAuth i dane kamer są sekretami, nie wpisami w repozytorium.
+- Klucze dostępu Cloudflare R2 i dane kamer są sekretami, nie wpisami w repozytorium.
 - Logi maskują URL-e RTSP i nagłówki autoryzacyjne.
 - Endpointy PTZ i pliki HLS są dostępne wyłącznie po zalogowaniu.
 - Dostęp z urządzeń w LAN powinien działać przez HTTPS, najlepiej za Caddy lub innym reverse proxy.

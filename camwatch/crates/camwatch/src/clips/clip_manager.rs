@@ -6,6 +6,7 @@ use std::{
 
 use dashmap::{DashMap, mapref::entry::Entry};
 use tokio::sync::mpsc;
+use uuid::Uuid;
 
 use crate::storage::{Database, Segment, StorageError, unix_time_millis};
 
@@ -96,6 +97,7 @@ impl ActiveClip {
 
     fn into_job(self) -> ClipJob {
         ClipJob {
+            event_id: Uuid::now_v7().to_string(),
             camera_id: self.camera_id,
             started_at: self.started_at,
             ended_at: self.ended_at,
@@ -107,6 +109,7 @@ impl ActiveClip {
 }
 
 pub struct ClipJob {
+    pub event_id: String,
     pub camera_id: String,
     pub started_at: SystemTime,
     pub ended_at: SystemTime,

@@ -4,8 +4,10 @@ use clap::Parser;
 use tracing_subscriber::EnvFilter;
 
 use camwatch::{
-    clips::{ClipManager, create_clip_worker, create_retainer_worker},
+    bucket::{NoOpBucketUploader, R2Client},
+    clips::{ClipManager, create_clip_uploader_worker, create_clip_worker, create_retainer_worker},
     config::{CameraConfig, Config},
+    ports::BucketUploader,
     runtime::CameraRuntime,
     storage::{Database, NewCamera},
     stream::{CameraStatusModel, GstreamerCameraStream, SegmentRecordingConfig},
@@ -69,7 +71,19 @@ async fn main() {
 
     let status_model = Arc::new(CameraStatusModel::default());
     let has_cameras = !config.cameras.is_empty();
-    let clip_sender = create_clip_worker();
+    let uploader: Arc<dyn BucketUploader> = if config.app.r2_enabled {
+        match R2Client::from_app_config(&config.app) {
+            Ok(client) => Arc::new(client),
+            Err(error) => {
+                eprintln!("R2 configuration error: {error}");
+                std::process::exit(4);
+            }
+        }
+    } else {
+        Arc::new(NoOpBucketUploader)
+    };
+    let upload_sender = create_clip_uploader_worker(uploader);
+    let clip_sender = create_clip_worker(upload_sender);
     let clip_manager = Arc::new(ClipManager::new(
         database.clone(),
         clip_sender,

@@ -33,6 +33,7 @@ fn parses_a_configuration_with_a_camera() {
     );
     assert_eq!(config.app.clips_directory.to_string_lossy(), "data/clips");
     assert_eq!(config.app.segment_rotation_seconds, 2);
+    assert!(!config.app.r2_enabled);
     assert!(!config.cameras[0].clip_after_motion);
 }
 
@@ -111,5 +112,49 @@ fn rejects_a_segment_rotation_longer_than_the_rolling_buffer() {
     assert_eq!(
         error.to_string(),
         "invalid configuration: segment_rotation_seconds cannot exceed rolling_buffer_seconds"
+    );
+}
+
+#[test]
+fn parses_r2_environment_variable_references_when_enabled() {
+    let input = VALID_CONFIG.replace(
+        "rolling_buffer_seconds = 30",
+        concat!(
+            "rolling_buffer_seconds = 30\n",
+            "r2_enabled = true\n",
+            "r2_endpoint_env = \"CAMWATCH_R2_ENDPOINT\"\n",
+            "r2_access_key_id_env = \"CAMWATCH_R2_ACCESS_KEY_ID\"\n",
+            "r2_secret_access_key_env = \"CAMWATCH_R2_SECRET_ACCESS_KEY\"\n",
+            "r2_bucket_env = \"CAMWATCH_R2_BUCKET\"\n",
+            "r2_prefix_env = \"CAMWATCH_R2_PREFIX\"\n",
+            "r2_region_env = \"CAMWATCH_R2_REGION\"\n",
+        ),
+    );
+
+    let config = Config::parse(&input).expect("R2 configuration should load");
+
+    assert!(config.app.r2_enabled);
+    assert_eq!(
+        config.app.r2_endpoint_env.as_ref().unwrap().as_str(),
+        "CAMWATCH_R2_ENDPOINT"
+    );
+    assert_eq!(
+        config.app.r2_region_env.as_ref().unwrap().as_str(),
+        "CAMWATCH_R2_REGION"
+    );
+}
+
+#[test]
+fn rejects_enabled_r2_without_required_environment_references() {
+    let input = VALID_CONFIG.replace(
+        "rolling_buffer_seconds = 30",
+        "rolling_buffer_seconds = 30\nr2_enabled = true",
+    );
+
+    let error = Config::parse(&input).expect_err("enabled R2 should require references");
+
+    assert_eq!(
+        error.to_string(),
+        "invalid configuration: r2_endpoint_env is required when r2_enabled is true"
     );
 }

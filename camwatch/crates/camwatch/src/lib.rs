@@ -1,3 +1,4 @@
+pub mod bucket;
 pub mod clips;
 pub mod config;
 pub mod motion;
