@@ -62,7 +62,8 @@ async fn updates_status_from_the_camera_stream() {
         Arc::clone(&status_model),
         database,
         clip_manager,
-    );
+    )
+    .await;
     assert_eq!(runtime.pre_event_seconds, 10);
     assert_eq!(runtime.post_event_seconds, 20);
     runtime.run().await;
@@ -145,7 +146,8 @@ async fn queues_clip_with_pre_and_post_window() {
         Arc::new(CameraStatusModel::default()),
         database,
         Arc::clone(&clip_manager),
-    );
+    )
+    .await;
     runtime.run().await;
 
     let clip = clip_receiver

@@ -22,12 +22,12 @@ pub struct PtzMove {
     pub speed: f32,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PtzDirection {
-    Up,
-    Down,
-    Left,
-    Right,
+    Up(f32),
+    Down(f32),
+    Left(f32),
+    Right(f32),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -121,7 +121,6 @@ pub(super) fn mat_to_yolo_tensor(mat: &impl core::ToInputArray) -> opencv::Resul
         &mut rgb,
         imgproc::COLOR_BGR2RGB,
         0,
-        core::AlgorithmHint::ALGO_HINT_DEFAULT,
     )?;
     let pixels = rgb.data_typed::<Vec3b>()?;
     let arr = Array4::from_shape_fn((1, 3, 640, 640), |(_, c, y, x)| {

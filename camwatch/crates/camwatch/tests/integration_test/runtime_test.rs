@@ -51,7 +51,8 @@ async fn run_runtime_until_clip(clip_after_motion: bool) -> ClipJob {
         Arc::new(CameraStatusModel::default()),
         database,
         clip_manager,
-    );
+    )
+    .await;
     let runtime_task = tokio::spawn(runtime.run());
 
     let event = tokio::time::timeout(Duration::from_secs(60), clip_receiver.recv())

@@ -1,6 +1,6 @@
 use std::time::SystemTime;
 
-use sqlx::query_as;
+use sqlx::{query_as, query_builder};
 use uuid::Uuid;
 
 use super::{
@@ -205,5 +205,45 @@ impl Database {
         .map_err(StorageError::Database)?;
 
         Ok(upload)
+    }
+
+    pub async fn get_segments_finished_before(&self, before: SystemTime) -> Result<Vec<Segment>, StorageError> {
+        let before_timestamp = unix_time_millis(before).unwrap_or_default();
+
+        let segments = query_as::<_, Segment>(
+            "SELECT camera_id, path, started_at, ended_at, size_bytes
+             FROM segments
+             WHERE ended_at < ?",
+        )
+        .bind(before_timestamp)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(StorageError::Database)?;
+
+        Ok(segments)
+    }
+
+    pub async fn remove_segments(&self, paths: &[String]) -> Result<(), StorageError> {
+        if paths.is_empty() {
+            return Ok(());
+        }
+
+        let mut query =
+            query_builder::QueryBuilder::new("DELETE FROM segments WHERE path IN (");
+        {
+            let mut separated = query.separated(", ");
+            for path in paths {
+                separated.push_bind(path);
+            }
+        }
+        query.push(")");
+
+        query
+            .build()
+            .execute(&self.pool)
+            .await
+            .map_err(StorageError::Database)?;
+
+        Ok(())
     }
 }

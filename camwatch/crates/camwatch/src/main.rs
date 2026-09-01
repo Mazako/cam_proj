@@ -4,7 +4,7 @@ use clap::Parser;
 use tracing_subscriber::EnvFilter;
 
 use camwatch::{
-    clips::{ClipManager, create_clip_worker},
+    clips::{ClipManager, create_clip_worker, create_retainer_worker},
     config::{CameraConfig, Config},
     runtime::CameraRuntime,
     storage::{Database, NewCamera},
@@ -75,6 +75,11 @@ async fn main() {
         clip_sender,
         config.app.clips_directory.clone(),
     ));
+    create_retainer_worker(
+        database.clone(),
+        u64::from(config.app.rolling_buffer_seconds),
+        Arc::clone(&clip_manager),
+    );
     for camera in config.cameras {
         let recording = SegmentRecordingConfig::new(
             config.app.segment_directory.join(camera.id.as_str()),
@@ -86,17 +91,16 @@ async fn main() {
             recording,
         ) {
             Ok(stream) => {
-                tokio::spawn(
-                    CameraRuntime::new(
-                        camera,
-                        &config.app,
-                        stream,
-                        Arc::clone(&status_model),
-                        database.clone(),
-                        Arc::clone(&clip_manager),
-                    )
-                    .run(),
-                );
+                let runtime = CameraRuntime::new(
+                    camera,
+                    &config.app,
+                    stream,
+                    Arc::clone(&status_model),
+                    database.clone(),
+                    Arc::clone(&clip_manager),
+                )
+                .await;
+                tokio::spawn(runtime.run());
             }
             Err(_) => {
                 tracing::warn!(

@@ -4,6 +4,7 @@ use crate::{
     clips::{ClipManager, store_segment},
     config::{AppConfig, CameraConfig},
     motion::{Mog2MotionDetector, YoloAnalyzer},
+    onvif::OnvifConnection,
     ports::{CameraStream, CameraStreamEvent, CameraStreamStatus, Frame, MotionDetector},
     storage::Database,
     stream::CameraStatusModel,
@@ -19,13 +20,14 @@ pub struct CameraRuntime<S> {
     motion_detector: Mog2MotionDetector,
     clip_manager: Arc<ClipManager>,
     yolo_analyzer: Option<YoloAnalyzer>,
+    onvif: Option<OnvifConnection>,
 }
 
 impl<S> CameraRuntime<S>
 where
     S: CameraStream,
 {
-    pub fn new(
+    pub async fn new(
         camera_config: CameraConfig,
         app_config: &AppConfig,
         stream: S,
@@ -39,6 +41,7 @@ where
         } else {
             Some(YoloAnalyzer::new(camera_config.yolo_confidence).unwrap())
         };
+        let onvif = OnvifConnection::try_build(&camera_config).await;
         Self {
             pre_event_seconds: u64::from(app_config.pre_event_seconds),
             post_event_seconds: u64::from(app_config.post_event_seconds),
@@ -49,7 +52,12 @@ where
             motion_detector,
             clip_manager,
             yolo_analyzer,
+            onvif,
         }
+    }
+
+    pub fn has_ptz(&self) -> bool {
+        self.onvif.is_some()
     }
 
     pub async fn run(mut self) {
