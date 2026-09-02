@@ -1,16 +1,7 @@
 use gstreamer::{self as gst, prelude::*};
-use thiserror::Error;
 
-use super::segment_recording::{SegmentOutput, SegmentRecordingConfig, SegmentRecordingError};
-use super::{RtspCodec, escape_pipeline_value};
-
-#[derive(Debug, Error)]
-pub enum PipelineError {
-    #[error(transparent)]
-    Recording(#[from] SegmentRecordingError),
-    #[error("GStreamer pipeline could not be built")]
-    Build,
-}
+use super::segment_output::SegmentOutput;
+use super::{PipelineError, RtspCodec, SegmentRecordingConfig, escape_pipeline_value};
 
 pub fn build_pipeline(
     rtsp_url: &str,

@@ -1,114 +1,23 @@
 use std::{
-    collections::HashMap,
-    env,
-    path::PathBuf,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
     thread,
-    time::{Duration, SystemTime},
+    time::SystemTime,
 };
 
 use backon::{BackoffBuilder, ExponentialBuilder};
 use gstreamer::{self as gst, prelude::*};
 use gstreamer_app::{self as gst_app};
 use tokio::sync::mpsc;
-use url::Url;
-
-use derive_new::new;
 
 use super::{
-    CameraStream, CameraStreamError, CameraStreamEvent, CameraStreamFuture, CameraStreamStatus,
-    Frame, PixelFormat, RtspCodec, SegmentRecordingConfig, build_pipeline,
+    CameraStreamError, CameraStreamEvent, CameraStreamStatus, Frame, PixelFormat, RtspCodec,
+    SegmentRecordingConfig, build_pipeline, segment_times::SegmentTimes,
 };
 
-const EVENT_BUFFER_CAPACITY: usize = 8;
-
-#[derive(new)]
-struct SegmentTimes {
-    pipeline_started_at: SystemTime,
-    #[new(default)]
-    opened_at: HashMap<PathBuf, SystemTime>,
-}
-
-impl SegmentTimes {
-    fn handle(&mut self, element: &gst::message::Element) -> Option<CameraStreamEvent> {
-        let structure = element.structure()?;
-        let location = structure.get::<String>("location").ok()?;
-        let running_time = structure.get::<gst::ClockTime>("running-time").ok()?;
-        let at = self
-            .pipeline_started_at
-            .checked_add(Duration::from_nanos(running_time.nseconds()))?;
-        let path = PathBuf::from(location);
-
-        match structure.name().as_str() {
-            "splitmuxsink-fragment-opened" => {
-                self.opened_at.insert(path, at);
-                None
-            }
-            "splitmuxsink-fragment-closed" => {
-                let started_at = self.opened_at.remove(&path)?;
-                Some(CameraStreamEvent::SegmentFinalized {
-                    path,
-                    started_at,
-                    ended_at: at,
-                })
-            }
-            _ => None,
-        }
-    }
-}
-
-pub struct GstreamerCameraStream {
-    receiver: mpsc::Receiver<Result<CameraStreamEvent, CameraStreamError>>,
-}
-
-impl GstreamerCameraStream {
-    pub fn from_environment(
-        rtsp_url_env: &str,
-        codec: RtspCodec,
-        recording: SegmentRecordingConfig,
-    ) -> Result<Self, CameraStreamError> {
-        let rtsp_url = env::var(rtsp_url_env).map_err(|_| CameraStreamError::Unavailable)?;
-        Self::new(rtsp_url, codec, recording)
-    }
-
-    pub fn new(
-        rtsp_url: String,
-        codec: RtspCodec,
-        recording: SegmentRecordingConfig,
-    ) -> Result<Self, CameraStreamError> {
-        let url = Url::parse(&rtsp_url).map_err(|_| CameraStreamError::Unavailable)?;
-        if !matches!(url.scheme(), "rtsp" | "rtsps") {
-            return Err(CameraStreamError::Unavailable);
-        }
-        gst::init().map_err(|_| CameraStreamError::Failed)?;
-
-        let (sender, receiver) = mpsc::channel(EVENT_BUFFER_CAPACITY);
-        thread::Builder::new()
-            .name("camwatch-rtsp".to_owned())
-            .spawn(move || run_worker(rtsp_url, codec, recording, sender))
-            .map_err(|_| CameraStreamError::Failed)?;
-
-        Ok(Self { receiver })
-    }
-}
-
-impl CameraStream for GstreamerCameraStream {
-    fn next_event(
-        &mut self,
-    ) -> CameraStreamFuture<'_, Result<CameraStreamEvent, CameraStreamError>> {
-        Box::pin(async move {
-            self.receiver
-                .recv()
-                .await
-                .unwrap_or(Err(CameraStreamError::Unavailable))
-        })
-    }
-}
-
-fn run_worker(
+pub(super) fn run_worker(
     rtsp_url: String,
     codec: RtspCodec,
     recording: SegmentRecordingConfig,

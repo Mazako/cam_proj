@@ -4,119 +4,14 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use dashmap::{DashMap, mapref::entry::Entry};
+use dashmap::DashMap;
 use tokio::sync::mpsc;
-use uuid::Uuid;
 
 use crate::storage::{Database, Segment, StorageError, unix_time_millis};
 
+use super::{ClipJob, active_clip::ActiveClip, segment_lease::SegmentLease};
+
 type SegmentReservations = Arc<DashMap<String, usize>>;
-
-pub(crate) struct SegmentLease {
-    reservations: SegmentReservations,
-    paths: Vec<String>,
-}
-
-impl SegmentLease {
-    fn new(reservations: SegmentReservations) -> Self {
-        Self {
-            reservations,
-            paths: Vec::new(),
-        }
-    }
-
-    fn reserve(&mut self, path: String) {
-        if self.paths.contains(&path) {
-            return;
-        }
-
-        self.reservations
-            .entry(path.clone())
-            .and_modify(|count| *count += 1)
-            .or_insert(1);
-        self.paths.push(path);
-    }
-}
-
-impl Drop for SegmentLease {
-    fn drop(&mut self) {
-        for path in &self.paths {
-            if let Entry::Occupied(mut entry) = self.reservations.entry(path.clone()) {
-                if *entry.get() == 1 {
-                    entry.remove();
-                } else {
-                    *entry.get_mut() -= 1;
-                }
-            }
-        }
-    }
-}
-
-struct ActiveClip {
-    camera_id: String,
-    started_at: SystemTime,
-    ended_at: SystemTime,
-    path: PathBuf,
-    segments: Vec<Segment>,
-    lease: SegmentLease,
-}
-
-impl ActiveClip {
-    fn new(
-        camera_id: String,
-        detected_at: SystemTime,
-        pre_duration: Duration,
-        post_duration: Duration,
-        path: PathBuf,
-        lease: SegmentLease,
-    ) -> Self {
-        let started_at = detected_at.checked_sub(pre_duration).unwrap();
-        let ended_at = detected_at.checked_add(post_duration).unwrap();
-
-        Self {
-            camera_id,
-            started_at,
-            ended_at,
-            path,
-            segments: Vec::new(),
-            lease,
-        }
-    }
-
-    fn add_segment(&mut self, segment: Segment) {
-        self.lease.reserve(segment.path.clone());
-        self.segments.push(segment);
-    }
-
-    fn is_sufficient(&self) -> bool {
-        let ended_at = unix_time_millis(self.ended_at).unwrap_or_default();
-        self.segments
-            .iter()
-            .any(|segment| segment.ended_at >= ended_at)
-    }
-
-    fn into_job(self) -> ClipJob {
-        ClipJob {
-            event_id: Uuid::now_v7().to_string(),
-            camera_id: self.camera_id,
-            started_at: self.started_at,
-            ended_at: self.ended_at,
-            path: self.path,
-            segments: self.segments,
-            _lease: self.lease,
-        }
-    }
-}
-
-pub struct ClipJob {
-    pub event_id: String,
-    pub camera_id: String,
-    pub started_at: SystemTime,
-    pub ended_at: SystemTime,
-    pub path: PathBuf,
-    pub segments: Vec<Segment>,
-    pub(crate) _lease: SegmentLease,
-}
 
 pub struct ClipManager {
     clips: DashMap<String, ActiveClip>,
@@ -160,7 +55,7 @@ impl ClipManager {
             .database
             .segments_overlapping(
                 &camera_id,
-                unix_time_millis(clip.started_at).unwrap_or_default(),
+                unix_time_millis(clip.started_at()).unwrap_or_default(),
                 unix_time_millis(detected_at).unwrap_or_default(),
             )
             .await?;

@@ -2,9 +2,7 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
 use crate::bucket::UploadRequest;
 
-use super::{
-    clip_manager::ClipJob, clip_store::create_clip_from_segments, clip_uploader::ClipUploadJob,
-};
+use super::{ClipJob, ClipUploadJob, clip_store::create_clip_from_segments};
 
 pub fn create_clip_worker(
     upload_sender: UnboundedSender<ClipUploadJob>,

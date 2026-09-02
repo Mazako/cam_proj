@@ -1,4 +1,6 @@
-use std::{path::PathBuf, sync::Arc, time::Duration};
+mod cli;
+
+use std::{sync::Arc, time::Duration};
 
 use clap::Parser;
 use tracing_subscriber::EnvFilter;
@@ -12,13 +14,7 @@ use camwatch::{
     storage::{Database, NewCamera},
     stream::{CameraStatusModel, GstreamerCameraStream, SegmentRecordingConfig},
 };
-
-#[derive(Debug, Parser)]
-#[command(name = "camwatch", version, about = "Local network camera monitoring")]
-struct Cli {
-    #[arg(long, env = "CAMWATCH_CONFIG", default_value = "camwatch.toml")]
-    config: PathBuf,
-}
+use cli::Cli;
 
 #[tokio::main]
 async fn main() {

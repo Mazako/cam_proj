@@ -1,8 +1,9 @@
 use serde::Deserialize;
 use url::Url;
 
-use super::environment::EnvironmentVariableName;
 use crate::stream::RtspCodec;
+
+use super::{CameraId, EnvironmentVariableName};
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -22,16 +23,6 @@ pub struct CameraConfig {
 
 fn default_clip_after_motion() -> bool {
     true
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-#[serde(transparent)]
-pub struct CameraId(String);
-
-impl CameraId {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
 }
 
 pub(super) fn is_camera_id(value: &str) -> bool {

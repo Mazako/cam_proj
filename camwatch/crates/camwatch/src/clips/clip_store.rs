@@ -4,54 +4,16 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use derive_new::new;
 use gstreamer::{self as gst, prelude::*};
 use gstreamer_pbutils as gst_pbutils;
-use thiserror::Error;
 use url::Url;
 
 use crate::{
-    storage::{Database, NewSegment, Segment, StorageError, unix_time_millis},
+    storage::{Database, NewSegment, Segment, unix_time_millis},
     stream::escape_pipeline_value,
 };
 
-#[derive(Clone, Debug, Eq, PartialEq, new)]
-pub struct Clip {
-    pub path: PathBuf,
-    pub duration: Duration,
-}
-
-#[derive(Debug, Error)]
-pub enum ClipStoreError {
-    #[error("segment time range is invalid")]
-    InvalidTimeRange,
-    #[error("path is not valid UTF-8")]
-    InvalidPath,
-    #[error("no segments overlap the requested clip range")]
-    NoSegments,
-    #[error("cannot read file metadata")]
-    FileMetadata(#[source] std::io::Error),
-    #[error("cannot create clip directory")]
-    CreateDirectory(#[source] std::io::Error),
-    #[error("cannot stage segment")]
-    StageSegment(#[source] std::io::Error),
-    #[error("cannot create temporary clip directory")]
-    TemporaryDirectory(#[source] std::io::Error),
-    #[error("GStreamer could not initialize")]
-    GstreamerInitialization,
-    #[error("GStreamer pipeline could not be built")]
-    PipelineBuild,
-    #[error("GStreamer pipeline could not start")]
-    PipelineStart,
-    #[error("GStreamer pipeline failed while creating the clip")]
-    PipelineExecution,
-    #[error("clip metadata could not be read")]
-    ClipMetadata,
-    #[error(transparent)]
-    Storage(#[from] StorageError),
-    #[error("clip assembly task stopped unexpectedly")]
-    AssemblyTask,
-}
+use super::{Clip, ClipStoreError};
 
 pub async fn store_segment(
     database: &Database,

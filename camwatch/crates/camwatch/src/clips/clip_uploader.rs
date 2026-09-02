@@ -5,10 +5,7 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
 use crate::bucket::{BucketUploader, BucketUploaderError, RemoteObject, UploadRequest};
 
-pub struct ClipUploadJob {
-    pub camera_id: String,
-    pub request: UploadRequest,
-}
+use super::ClipUploadJob;
 
 pub fn create_clip_uploader_worker(
     uploader: Arc<dyn BucketUploader>,

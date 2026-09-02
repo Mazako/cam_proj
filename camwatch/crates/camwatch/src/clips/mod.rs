@@ -1,11 +1,21 @@
+mod active_clip;
+mod clip;
+mod clip_job;
 mod clip_manager;
 mod clip_saver;
 pub mod clip_store;
+mod clip_store_error;
+mod clip_upload_job;
 mod clip_uploader;
+mod segment_lease;
 mod segment_retainer;
 
-pub use clip_manager::{ClipJob, ClipManager};
+pub use clip::Clip;
+pub use clip_job::ClipJob;
+pub use clip_manager::ClipManager;
 pub use clip_saver::create_clip_worker;
-pub use clip_store::{Clip, ClipStoreError, create_clip, store_segment};
-pub use clip_uploader::{ClipUploadJob, create_clip_uploader_worker};
+pub use clip_store::{create_clip, store_segment};
+pub use clip_store_error::ClipStoreError;
+pub use clip_upload_job::ClipUploadJob;
+pub use clip_uploader::create_clip_uploader_worker;
 pub use segment_retainer::{create_retainer_worker, retain_expired_segments};

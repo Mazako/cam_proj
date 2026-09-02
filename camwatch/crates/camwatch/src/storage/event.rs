@@ -1,9 +1,4 @@
-#[derive(Clone, Debug, PartialEq)]
-pub struct NewEvent {
-    pub camera_id: String,
-    pub started_at: i64,
-    pub trigger: String,
-}
+use super::EventStatus;
 
 #[derive(Clone, Debug, PartialEq, sqlx::FromRow)]
 pub struct Event {
@@ -17,13 +12,4 @@ pub struct Event {
     pub status: EventStatus,
     pub created_at: i64,
     pub updated_at: i64,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, sqlx::Type)]
-#[sqlx(rename_all = "snake_case")]
-pub enum EventStatus {
-    Recording,
-    Finalizing,
-    Ready,
-    Failed,
 }

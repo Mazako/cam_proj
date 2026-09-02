@@ -1,10 +1,26 @@
-mod motion_detector;
-mod person_detector;
-
+mod bounding_box;
 mod cv2_helper;
+mod detection;
+mod detection_class;
 mod mog2;
-mod yolo;
+mod motion_detector;
+mod motion_detector_error;
+mod motion_value;
+mod person_detection;
+mod person_detector;
+mod person_detector_error;
+mod yolo_analyzer;
+mod yolo_analyzer_error;
+
+pub use bounding_box::BoundingBox;
+pub use detection::Detection;
+pub use detection_class::DetectionClass;
 pub use mog2::Mog2MotionDetector;
-pub use motion_detector::{Motion, MotionDetector, MotionDetectorError};
-pub use person_detector::{BoundingBox, PersonDetection, PersonDetector, PersonDetectorError};
-pub use yolo::{Detection, DetectionClass, YoloAnalyzer, YoloAnalyzerError};
+pub use motion_detector::MotionDetector;
+pub use motion_detector_error::MotionDetectorError;
+pub use motion_value::Motion;
+pub use person_detection::PersonDetection;
+pub use person_detector::{PersonDetector, PersonDetectorFuture};
+pub use person_detector_error::PersonDetectorError;
+pub use yolo_analyzer::YoloAnalyzer;
+pub use yolo_analyzer_error::YoloAnalyzerError;

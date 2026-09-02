@@ -1,7 +1,8 @@
 use std::{fs, path::PathBuf, time::Duration};
 
 use derive_new::new;
-use thiserror::Error;
+
+use super::{segment_output::SegmentOutput, segment_recording_error::SegmentRecordingError};
 
 #[derive(Clone, Debug, new)]
 pub struct SegmentRecordingConfig {
@@ -44,19 +45,4 @@ impl SegmentRecordingConfig {
             start_index,
         ))
     }
-}
-
-#[derive(Debug, Error)]
-pub enum SegmentRecordingError {
-    #[error("cannot prepare recording directory")]
-    Directory,
-    #[error("recording segment index is exhausted")]
-    IndexExhausted,
-}
-
-#[derive(new)]
-pub(crate) struct SegmentOutput {
-    pub(crate) location: PathBuf,
-    pub(crate) rotation_nanoseconds: u64,
-    pub(crate) start_index: i32,
 }
