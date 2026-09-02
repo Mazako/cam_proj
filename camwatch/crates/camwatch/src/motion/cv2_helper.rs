@@ -116,13 +116,7 @@ pub(super) fn letterbox(
 pub(super) fn mat_to_yolo_tensor(mat: &impl core::ToInputArray) -> opencv::Result<Array4<f32>> {
     let resized = letterbox(mat, 640, 640)?;
     let mut rgb = Mat::default();
-    imgproc::cvt_color(
-        &resized,
-        &mut rgb,
-        imgproc::COLOR_BGR2RGB,
-        0,
-        core::AlgorithmHint::ALGO_HINT_DEFAULT,
-    )?;
+    imgproc::cvt_color_def(&resized, &mut rgb, imgproc::COLOR_BGR2RGB)?;
     let pixels = rgb.data_typed::<Vec3b>()?;
     let arr = Array4::from_shape_fn((1, 3, 640, 640), |(_, c, y, x)| {
         f32::from(pixels[y * 640 + x][c]) / 255.0
