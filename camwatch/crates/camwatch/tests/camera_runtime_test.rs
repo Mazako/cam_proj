@@ -104,7 +104,7 @@ async fn queues_clip_with_pre_and_post_window() {
     let black_frame = vec![0; width * height * 3];
     let mut white_frame = black_frame.clone();
     for pixel in white_frame
-        .chunks_exact_mut(3)
+        .as_chunks_mut::<3>().0.iter_mut()
         .take((width / 2) * (height / 2))
     {
         pixel.fill(255);
