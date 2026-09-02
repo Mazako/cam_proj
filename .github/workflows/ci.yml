@@ -13,10 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
-    defaults:
-      run:
-        working-directory: camwatch
-
     steps:
       - uses: actions/checkout@v6
 

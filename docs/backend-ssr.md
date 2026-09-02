@@ -61,8 +61,10 @@ htmx obsługuje odświeżanie kart kamer, statusu i aktywności klipu, wysyłani
 ## Docelowy układ workspace
 
 ```text
-camwatch/
+.
 ├── Cargo.toml
+├── config/
+├── docs/
 └── crates/
     ├── camwatch/
     │   ├── src/
@@ -559,7 +561,7 @@ Testy HTTP powinny działać bez GStreamera, kamery, ONVIF, R2 ani prawdziwej ba
 ## Kolejność implementacji
 
 1. Dodać `camwatch-server` do workspace'u z pustym `GET /health`.
-2. Wydzielić bootstrap obecnego `camwatch/src/main.rs` do `CamwatchService::start` i `CamwatchHandle`.
+2. Wydzielić bootstrap obecnego `crates/camwatch/src/main.rs` do `CamwatchService::start` i `CamwatchHandle`.
 3. Dodać in-memory rejestr kamer i odczytowe modele UI w crate'ie `camwatch`.
 4. Dodać Axum router, `AppState`, obsługę błędów i bazowy layout Askama.
 5. Dodać logowanie, sesje, middleware autoryzacji, CSRF oraz logout.

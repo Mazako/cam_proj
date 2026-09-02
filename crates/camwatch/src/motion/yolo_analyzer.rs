@@ -4,7 +4,7 @@ use crate::{motion::cv2_helper::mat_to_yolo_tensor, stream::Frame};
 
 use super::{Detection, DetectionClass, YoloAnalyzerError};
 
-static MODEL_BYTES: &[u8] = include_bytes!("../../../../../yolo26n.onnx");
+static MODEL_BYTES: &[u8] = include_bytes!("../../../../yolo26n.onnx");
 static PERSON_CLASS: i32 = 0;
 static CAT_CLASS: i32 = 15;
 static DOG_CLASS: i32 = 16;

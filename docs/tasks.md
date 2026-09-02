@@ -227,7 +227,7 @@ Szczegółowa architektura, decyzje bezpieczeństwa oraz kontrakty między crate
 
 **Pokrywa:** NFR-01
 
-**Zakres:** przenieść bootstrap z obecnego `camwatch/src/main.rs` do warstwy aplikacyjnej crate'a `camwatch`. Dodać publiczny `CamwatchService::start` oraz `CamwatchHandle`. Handle ma ukrywać SQLite, GStreamera, ONVIF i kanały workerów, ale pozwolić backendowi na listowanie kamer, odczyt szczegółów, wykonanie PTZ, CRUD kamer i kontrolowane zamknięcie.
+**Zakres:** przenieść bootstrap z obecnego `crates/camwatch/src/main.rs` do warstwy aplikacyjnej crate'a `camwatch`. Dodać publiczny `CamwatchService::start` oraz `CamwatchHandle`. Handle ma ukrywać SQLite, GStreamera, ONVIF i kanały workerów, ale pozwolić backendowi na listowanie kamer, odczyt szczegółów, wykonanie PTZ, CRUD kamer i kontrolowane zamknięcie.
 
 **Kryteria akceptacji:**
 

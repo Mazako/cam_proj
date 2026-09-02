@@ -6,6 +6,6 @@
   "sqlfluff.config": "${workspaceFolder}/.sqlfluff",
   "sqlfluff.dialect": "sqlite",
   "rust-analyzer.linkedProjects": [
-    "${workspaceFolder}/camwatch/Cargo.toml"
+    "${workspaceFolder}/Cargo.toml"
   ]
 }

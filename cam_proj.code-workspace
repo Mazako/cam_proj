@@ -1,16 +1,8 @@
 {
   "folders": [
     {
-      "name": "camwatch",
-      "path": "camwatch"
-    },
-    {
-      "name": "Documentation",
-      "path": "docs"
-    },
-    {
-      "name": "Experiments",
-      "path": "experiments"
+      "name": "Camwatch",
+      "path": "."
     }
   ],
   "settings": {
@@ -19,9 +11,9 @@
       "editor.formatOnSave": true
     },
     "rust-analyzer.linkedProjects": [
-      "${workspaceFolder:camwatch}/Cargo.toml"
+      "${workspaceFolder}/Cargo.toml"
     ],
-    "sqlfluff.config": "${workspaceFolder:camwatch}/../.sqlfluff",
+    "sqlfluff.config": "${workspaceFolder}/.sqlfluff",
     "sqlfluff.dialect": "sqlite"
   },
   "extensions": {

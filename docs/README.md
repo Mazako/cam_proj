@@ -10,7 +10,6 @@ Pierwsza wersja jest przeznaczona dla jednej do czterech kamer Tapo w tej samej 
 
 - [Backlog spec-driven](tasks.md) — kolejność implementacji, zależności i kryteria akceptacji.
 - [Specyfikacja backendu SSR](backend-ssr.md) — podział crate'ów, SSR, widoki i logowanie.
-- `experiments/` — dotychczasowe eksperymenty Python/OpenCV; nie są częścią docelowej aplikacji Rust.
 
 ## Zakres MVP
 
