@@ -30,15 +30,15 @@ Każdy task jest powiązany z wymaganiami z [dokumentu przewodniego](README.md).
 
 ### ARC-02: Dodać magazyn SQLite i migracje
 
-**Pokrywa:** FR-06, NFR-05
+**Pokrywa:** FR-06
 
-**Zakres:** migracje `cameras`, `events`, `uploads`, repozytoria oraz modele statusów.
+**Zakres:** migracje `cameras` i `segments`; SQLite przechowuje wyłącznie dane potrzebne do bufora i inicjalizacji kamer. Historia zdarzeń oraz uploadów nie jest zapisywana.
 
 **Kryteria akceptacji:**
 
 - Migracje są idempotentne.
-- Zdarzenie i rekord uploadu można zapisać oraz odczytać.
-- Restart aplikacji nie usuwa danych.
+- Dane kamer i segmentów można zapisać oraz odczytać.
+- Schemat nie zawiera tabel historii zdarzeń ani uploadów.
 
 **Zależności:** ARC-01.
 
@@ -46,11 +46,11 @@ Każdy task jest powiązany z wymaganiami z [dokumentu przewodniego](README.md).
 
 **Pokrywa:** wszystkie FR
 
-**Zakres:** interfejsy `CameraStream`, `MotionDetector`, `PersonDetector`, `ClipStore`, `R2Uploader`, `PtzController` i ich implementacje testowe.
+**Zakres:** interfejsy `CameraStream`, `MotionDetector`, `PersonDetector`, `BucketUploader` i ich implementacje testowe oraz adaptery infrastruktury.
 
 **Kryteria akceptacji:**
 
-- Silnik zdarzeń można uruchomić z fałszywą kamerą i fałszywym uploaderem.
+- Lifecycle klipu można uruchomić z fałszywą kamerą i fałszywym uploaderem.
 - Kod domenowy nie importuje bezpośrednio GStreamera, ONVIF ani klienta S3/R2.
 
 **Zależności:** ARC-01, ARC-02.
@@ -135,11 +135,11 @@ Każdy task jest powiązany z wymaganiami z [dokumentu przewodniego](README.md).
 
 **Pokrywa:** FR-03, FR-04, FR-05, FR-06
 
-**Zakres:** stany `idle`, `candidate`, `recording`, `finalizing`, `upload_pending`, `uploaded`, `upload_failed`; cooldown i rozszerzanie zdarzeń.
+**Zakres:** in-memory lifecycle klipu, cooldown, rozszerzanie bieżącego klipu oraz przekazanie ukończonego klipu do kolejki uploadu. Żaden stan zdarzenia ani uploadu nie jest utrwalany.
 
 **Kryteria akceptacji:**
 
-- Ruch tworzy zdarzenie, a YOLO wzbogaca je o metadane osoby.
+- Ruch rozpoczyna bieżący klip, a YOLO wzbogaca jego dane o metadane osoby.
 - Seria ruchów w oknie cooldown nie tworzy duplikatów.
 - Zdarzenie przechodzi do finalizacji dopiero po ciszy wymaganej dla post-bufferu.
 
@@ -151,11 +151,11 @@ Każdy task jest powiązany z wymaganiami z [dokumentu przewodniego](README.md).
 
 **Pokrywa:** FR-01, FR-10
 
-**Zakres:** połączenie ONVIF, profil media, sprawdzenie PTZ i komendy `ContinuousMove` oraz `Stop`.
+**Zakres:** połączenie ONVIF, odczyt możliwości PTZ przy starcie aplikacji oraz komendy `ContinuousMove` i `Stop` przez `OnvifConnection`.
 
 **Kryteria akceptacji:**
 
-- Aplikacja zapisuje, czy kamera zgłasza PTZ.
+- Aplikacja zna możliwości PTZ kamery od momentu jej uruchomienia.
 - Ruch we wszystkich czterech kierunkach oraz zatrzymanie działa na obsługiwanej kamerze.
 - Kamera bez PTZ nie powoduje błędu krytycznego.
 
@@ -179,15 +179,29 @@ Każdy task jest powiązany z wymaganiami z [dokumentu przewodniego](README.md).
 
 **Pokrywa:** FR-07, NFR-05
 
-**Zakres:** worker uploadu, status w SQLite, retry z backoffem, nazewnictwo plików i metadane zdarzenia.
+**Zakres:** in-memory worker uploadu, maksymalnie trzy próby z backoffem, nazewnictwo plików i metadane żądania.
 
 **Kryteria akceptacji:**
 
 - Ukończony klip jest wysyłany do właściwego bucketa R2 i prefiksu obiektów.
-- Awaria sieci oznacza `upload_failed` lub `upload_pending`, bez usunięcia pliku lokalnego.
-- Po przywróceniu sieci upload zostaje wznowiony bez interwencji użytkownika.
+- Awaria sieci nie usuwa pliku lokalnego, a worker wykonuje maksymalnie trzy próby.
+- Po wyczerpaniu prób błąd jest logowany; wznowienie po restarcie procesu nie jest wymagane.
 
 **Zależności:** ARC-02, R2-01, VID-03, EVT-01.
+
+### R2-03: Testy klienta i workera Cloudflare R2
+
+**Pokrywa:** FR-07, NFR-03, NFR-05
+
+**Zakres:** testy konfiguracji klienta, poprawnego klucza obiektu, udanego uploadu, limitu trzech prób oraz opcjonalny test z prawdziwym bucketem uruchamiany wyłącznie przy komplecie referencji `CAMWATCH_R2_*`.
+
+**Kryteria akceptacji:**
+
+- Testy jednostkowe workera nie wymagają dostępu do sieci ani bucketa.
+- Błąd uploadu nie usuwa lokalnego pliku i kończy się po trzeciej próbie.
+- Test opcjonalny z prawdziwym R2 potwierdza zapis i odczyt obiektu testowego.
+
+**Zależności:** R2-01, R2-02.
 
 ## Etap 4 — panel WWW
 
@@ -219,17 +233,17 @@ Każdy task jest powiązany z wymaganiami z [dokumentu przewodniego](README.md).
 
 **Zależności:** VID-01, WEB-01.
 
-### WEB-02: Widok kamer i historia zdarzeń
+### WEB-02: Widok kamer i bieżącego stanu
 
 **Pokrywa:** FR-06, FR-09
 
-**Zakres:** lista statusów kamer, odtwarzacz HLS, historia zdarzeń, szczegóły oraz lokalny klip MP4.
+**Zakres:** lista statusów kamer, odtwarzacz HLS oraz bieżący stan aktywnego klipu i uploadu.
 
 **Kryteria akceptacji:**
 
 - Użytkownik widzi status każdej kamery i jej aktualny podgląd.
-- Użytkownik może odtworzyć klip zdarzenia.
-- Widok pokazuje typ zdarzenia, liczbę osób i status R2.
+- Użytkownik widzi bieżący stan klipu i uploadu bez historii zdarzeń.
+- Widok pokazuje typ bieżącego zdarzenia, liczbę osób i wynik ostatniej próby R2.
 
 **Zależności:** ARC-02, VID-04, EVT-01, WEB-01.
 
@@ -253,7 +267,7 @@ Każdy task jest powiązany z wymaganiami z [dokumentu przewodniego](README.md).
 
 **Pokrywa:** NFR-01, NFR-05, NFR-06
 
-**Zakres:** logi strukturalne, health check, metryki liczby zdarzeń/uploadów/reconnectów i limity dysku.
+**Zakres:** logi strukturalne, health check, metryki aktywnych klipów/prób uploadu/reconnectów i limity dysku.
 
 **Kryteria akceptacji:**
 
@@ -267,11 +281,11 @@ Każdy task jest powiązany z wymaganiami z [dokumentu przewodniego](README.md).
 
 **Pokrywa:** wszystkie FR i NFR
 
-**Zakres:** fałszywy RTSP/ONVIF/R2, scenariusze e2e i ręczna checklista z prawdziwą kamerą Tapo.
+**Zakres:** fałszywy RTSP/ONVIF/R2, scenariusze e2e i ręczna checklista z prawdziwą kamerą Tapo. Testy R2 są zaplanowane jako najbliższy krok.
 
 **Kryteria akceptacji:**
 
-- Test e2e potwierdza przepływ: ruch → osoba → MP4 → rekord → upload.
+- Test e2e potwierdza przepływ: ruch → osoba → MP4 → in-memory worker → upload.
 - Test awarii RTSP potwierdza reconnect bez wyłączenia serwera WWW.
 - Test autoryzacji potwierdza brak dostępu do HLS i klipów bez sesji.
 - Ręczny test PTZ i podglądu na prawdziwej kamerze kończy się pozytywnie.
@@ -280,4 +294,4 @@ Każdy task jest powiązany z wymaganiami z [dokumentu przewodniego](README.md).
 
 ## Kolejność pierwszego wdrożenia
 
-`ARC-01 → ARC-02 → ARC-03 → VID-01 → VID-02 → DET-01 → DET-02 → VID-03 → EVT-01 → R2-01 → R2-02 → WEB-01 → VID-04 → WEB-02 → ONV-01 → WEB-03 → OPS-01 → TST-01`
+`ARC-01 → ARC-02 → ARC-03 → VID-01 → VID-02 → DET-01 → DET-02 → VID-03 → EVT-01 → R2-01 → R2-02 → R2-03 → WEB-01 → VID-04 → WEB-02 → ONV-01 → WEB-03 → OPS-01 → TST-01`

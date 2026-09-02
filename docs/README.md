@@ -20,7 +20,7 @@ Pierwsza wersja jest przeznaczona dla jednej do czterech kamer Tapo w tej samej 
 5. Rotacyjny bufor nagrań obejmujący ostatnie `X` sekund.
 6. Klip MP4 zawierający materiał sprzed oraz po zdarzeniu.
 7. Asynchroniczna wysyłka klipu do Cloudflare R2 z ponawianiem po błędzie.
-8. Panel WWW: logowanie, lista kamer, podgląd HLS, PTZ i historia zdarzeń.
+8. Panel WWW: logowanie, lista kamer, podgląd HLS, PTZ i bieżący stan aplikacji.
 
 ## Poza zakresem MVP
 
@@ -39,9 +39,9 @@ flowchart LR
     Ingest --> Frames["Klatki analityczne"]
     Frames --> Motion["OpenCV: MOG2"]
     Motion -->|"ruch"| Yolo["ONNX Runtime: YOLO"]
-    Motion --> Events["Silnik zdarzeń"]
-    Yolo --> Events
-    Events --> Clips["Klip MP4: pre + post"]
+    Motion --> Lifecycle["In-memory lifecycle klipu"]
+    Yolo --> Lifecycle
+    Lifecycle --> Clips["Klip MP4: pre + post"]
     Clips --> Upload["Kolejka Cloudflare R2"]
     Ingest --> Hls["HLS dla WWW"]
     Hls --> Web["Panel WWW"]
@@ -58,9 +58,9 @@ Aplikacja jest jednym procesem Rust z modułami, a nie zbiorem mikroserwisów. K
 | RTSP, HLS i segmenty MP4 | GStreamer przez `gstreamer-rs` | Odbieranie, dekodowanie, segmentacja i podgląd przeglądarkowy |
 | Ruch | OpenCV przez crate `opencv` | MOG2, morfologia maski i kontury |
 | Osoby | `ort` + YOLO w ONNX | Inferencja osób na klatkach po wykryciu ruchu |
-| PTZ | klient ONVIF | Odczyt profilu kamery oraz komendy ruchu i zatrzymania |
+| PTZ | klient ONVIF | Odczyt możliwości kamery przy starcie oraz komendy ruchu i zatrzymania |
 | HTTP i WWW | `axum` | API, sesje, HLS i prosty panel |
-| Metadane | SQLite przez `sqlx` | Kamery, zdarzenia, uploady i stan retry |
+| Metadane | SQLite przez `sqlx` | Kamery i segmenty bufora |
 | Cloudflare R2 | S3-compatible API | Autoryzacja i odporna wysyłka MP4 |
 
 ## Przepływ zdarzenia
@@ -68,10 +68,10 @@ Aplikacja jest jednym procesem Rust z modułami, a nie zbiorem mikroserwisów. K
 1. Nadzorca kamery pobiera RTSP i zapisuje krótkie segmenty, domyślnie po dwie sekundy.
 2. Strumień analityczny dostarcza obniżoną liczbę klatek na sekundę do MOG2.
 3. Ruch spełniający próg powierzchni uruchamia YOLO na kilku klatkach.
-4. Silnik zdarzeń rozpoczyna lub rozszerza zdarzenie typu `motion`; wynik YOLO dodaje etykietę `person` i pewność.
+4. In-memory lifecycle rozpoczyna lub rozszerza bieżący klip; wynik YOLO dodaje etykietę `person` i pewność.
 5. Po okresie ciszy aplikacja kompletuję klip z segmentów `pre_event_seconds` przed zdarzeniem i `post_event_seconds` po nim.
-6. Klip jest zapisany lokalnie, odnotowany w SQLite i trafia do kolejki uploadu.
-7. Wysyłka do Cloudflare R2 działa w tle. Błąd nie usuwa lokalnego klipu i powoduje retry z narastającym opóźnieniem.
+6. Klip jest zapisany lokalnie i trafia do in-memory kolejki uploadu.
+7. Wysyłka do Cloudflare R2 działa w tle. Błąd nie usuwa lokalnego klipu i powoduje maksymalnie trzy próby z narastającym opóźnieniem.
 
 ## Wymagania funkcjonalne
 
@@ -80,11 +80,11 @@ Aplikacja jest jednym procesem Rust z modułami, a nie zbiorem mikroserwisów. K
 | FR-01 | Użytkownik może dodać, edytować, wyłączyć i usunąć kamerę RTSP/ONVIF. |
 | FR-02 | Dla każdej aktywnej kamery aplikacja utrzymuje połączenie RTSP i automatycznie je odnawia. |
 | FR-03 | Aplikacja wykrywa ruch przez MOG2 oraz ignoruje szum zgodnie z konfiguracją. |
-| FR-04 | Po ruchu aplikacja wykonuje detekcję osób YOLO i zapisuje wynik w zdarzeniu. |
+| FR-04 | Po ruchu aplikacja wykonuje detekcję osób YOLO i utrzymuje wynik w bieżącym lifecycle klipu. |
 | FR-05 | Aplikacja zachowuje konfigurowalny pre-buffer i tworzy MP4 z materiałem przed oraz po zdarzeniu. |
-| FR-06 | Zdarzenia są zapisywane lokalnie wraz z metadanymi i stanem uploadu. |
+| FR-06 | Aplikacja utrzymuje bieżący lifecycle klipu i uploadu wyłącznie w pamięci procesu. |
 | FR-07 | Aplikacja wysyła ukończone klipy MP4 do skonfigurowanego bucketa Cloudflare R2, pod określonym prefiksem obiektów. |
-| FR-08 | Panel WWW wymaga hasła aplikacji przed dostępem do kamer i zdarzeń. |
+| FR-08 | Panel WWW wymaga hasła aplikacji przed dostępem do kamer i bieżącego stanu aplikacji. |
 | FR-09 | Panel pokazuje podgląd każdej kamery w przeglądarce. |
 | FR-10 | Panel umożliwia PTZ dla kamer, które zgłaszają obsługę tej funkcji w ONVIF. |
 
@@ -96,8 +96,8 @@ Aplikacja jest jednym procesem Rust z modułami, a nie zbiorem mikroserwisów. K
 | NFR-02 | Klip zdarzenia nie może utracić materiału z okresu pre-bufferu po zwykłym restarcie procesu. |
 | NFR-03 | Hasła kamer, klucze dostępu R2 i hasło panelu nie mogą trafiać do logów ani zwykłego pliku konfiguracyjnego. |
 | NFR-04 | Panel domyślnie nasłuchuje na `127.0.0.1`; ekspozycja do LAN wymaga świadomej konfiguracji. |
-| NFR-05 | Wysyłka do R2 musi być odporna na chwilowy brak Internetu i możliwa do wznowienia. |
-| NFR-06 | Aplikacja ma logować stan kamer, zdarzeń i uploadów w sposób wystarczający do diagnozy. |
+| NFR-05 | Wysyłka do R2 wykonuje ograniczoną liczbę prób w ramach życia procesu i nie usuwa lokalnego klipu po błędzie. |
+| NFR-06 | Aplikacja ma logować stan kamer, aktywnych klipów i prób uploadu w sposób wystarczający do diagnozy. |
 
 ## Konfiguracja docelowa
 
@@ -128,7 +128,7 @@ motion_min_area = 1000
 yolo_confidence = 0.50
 ```
 
-Nazwy zmiennych środowiskowych dla Cloudflare R2 są konfigurowane w TOML-u, natomiast ich wartości są pobierane z env. Przy `r2_enabled = false` worker uploadu nie jest uruchamiany.
+Nazwy zmiennych środowiskowych dla Cloudflare R2 są konfigurowane w TOML-u, natomiast ich wartości są pobierane z env. Przy `r2_enabled = false` używany jest NoOp uploader i pliki nie są wysyłane do R2.
 
 ```text
 CAMWATCH_R2_ENDPOINT

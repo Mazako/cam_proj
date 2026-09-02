@@ -4,17 +4,12 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use super::{Camera, NewCamera, NewSegment, Segment, StorageError};
 use sqlx::{
     SqlitePool,
     migrate::Migrator,
     query_as, query_builder,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
-};
-use uuid::Uuid;
-
-use super::{
-    Camera, Event, EventStatus, NewCamera, NewEvent, NewSegment, NewUpload, Segment, StorageError,
-    Upload, UploadStatus,
 };
 
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
@@ -109,55 +104,6 @@ impl Database {
         Ok(camera)
     }
 
-    pub async fn create_event(&self, event: NewEvent) -> Result<Event, StorageError> {
-        let id = Uuid::now_v7().to_string();
-        let now = unix_time_millis(SystemTime::now()).unwrap_or_default();
-        let status = EventStatus::Recording;
-
-        sqlx::query(
-            "INSERT INTO \"events\" (
-                id, camera_id, started_at, \"trigger\", status, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(&id)
-        .bind(&event.camera_id)
-        .bind(event.started_at)
-        .bind(&event.trigger)
-        .bind(status)
-        .bind(now)
-        .bind(now)
-        .execute(&self.pool)
-        .await
-        .map_err(StorageError::Database)?;
-
-        Ok(Event {
-            id,
-            camera_id: event.camera_id,
-            started_at: event.started_at,
-            ended_at: None,
-            trigger: event.trigger,
-            clip_path: None,
-            clip_duration_ms: None,
-            status,
-            created_at: now,
-            updated_at: now,
-        })
-    }
-
-    pub async fn get_event(&self, id: &str) -> Result<Option<Event>, StorageError> {
-        let event = query_as::<_, Event>(
-            "SELECT id, camera_id, started_at, ended_at, \"trigger\", clip_path, clip_duration_ms,
-                    status, created_at, updated_at
-             FROM \"events\" WHERE id = ?",
-        )
-        .bind(id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(StorageError::Database)?;
-
-        Ok(event)
-    }
-
     pub async fn upsert_segment(&self, segment: NewSegment) -> Result<Segment, StorageError> {
         let now = unix_time_millis(SystemTime::now()).unwrap_or_default();
 
@@ -207,55 +153,6 @@ impl Database {
         .map_err(StorageError::Database)?;
 
         Ok(segments)
-    }
-
-    pub async fn create_upload(&self, upload: NewUpload) -> Result<Upload, StorageError> {
-        let id = Uuid::now_v7().to_string();
-        let now = unix_time_millis(SystemTime::now()).unwrap_or_default();
-        let status = UploadStatus::Pending;
-
-        sqlx::query(
-            "INSERT INTO uploads (
-                id, event_id, provider, status, attempt_count, next_attempt_at, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, 0, ?, ?, ?)",
-        )
-        .bind(&id)
-        .bind(&upload.event_id)
-        .bind(&upload.provider)
-        .bind(status)
-        .bind(upload.next_attempt_at)
-        .bind(now)
-        .bind(now)
-        .execute(&self.pool)
-        .await
-        .map_err(StorageError::Database)?;
-
-        Ok(Upload {
-            id,
-            event_id: upload.event_id,
-            provider: upload.provider,
-            status,
-            attempt_count: 0,
-            next_attempt_at: upload.next_attempt_at,
-            remote_file_id: None,
-            last_error: None,
-            created_at: now,
-            updated_at: now,
-        })
-    }
-
-    pub async fn get_upload(&self, id: &str) -> Result<Option<Upload>, StorageError> {
-        let upload = query_as::<_, Upload>(
-            "SELECT id, event_id, provider, status, attempt_count, next_attempt_at,
-                    remote_file_id, last_error, created_at, updated_at
-             FROM uploads WHERE id = ?",
-        )
-        .bind(id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(StorageError::Database)?;
-
-        Ok(upload)
     }
 
     pub async fn get_segments_finished_before(

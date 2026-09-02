@@ -16,33 +16,15 @@ CREATE TABLE IF NOT EXISTS cameras (
     )
 );
 
-CREATE TABLE IF NOT EXISTS "events" (
-    id TEXT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS segments (
+    path TEXT PRIMARY KEY,
     camera_id TEXT NOT NULL REFERENCES cameras (id),
     started_at INTEGER NOT NULL,
-    ended_at INTEGER,
-    "trigger" TEXT NOT NULL,
-    clip_path TEXT,
-    clip_duration_ms INTEGER,
-    status TEXT NOT NULL CHECK (status IN ('recording', 'finalizing', 'ready', 'failed')),
+    ended_at INTEGER NOT NULL,
+    size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-    CHECK (ended_at IS NULL OR ended_at >= started_at),
-    CHECK (clip_duration_ms IS NULL OR clip_duration_ms >= 0)
+    CHECK (ended_at >= started_at)
 );
 
-CREATE TABLE IF NOT EXISTS uploads (
-    id TEXT PRIMARY KEY,
-    event_id TEXT NOT NULL REFERENCES "events" (id),
-    provider TEXT NOT NULL,
-    status TEXT NOT NULL CHECK (status IN ('pending', 'in_progress', 'uploaded', 'failed')),
-    attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
-    next_attempt_at INTEGER,
-    remote_file_id TEXT,
-    last_error TEXT,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_events_camera_started_at ON "events" (camera_id, started_at DESC);
-CREATE INDEX IF NOT EXISTS idx_uploads_status_next_attempt_at ON uploads (status, next_attempt_at);
+CREATE INDEX IF NOT EXISTS idx_segments_camera_time ON segments (camera_id, started_at, ended_at);
