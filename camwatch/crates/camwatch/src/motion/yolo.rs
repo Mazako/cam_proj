@@ -1,7 +1,7 @@
 use derive_new::new;
 use ort::{session::Session, value::TensorRef};
 
-use crate::{motion::cv2_helper::mat_to_yolo_tensor, ports::Frame};
+use crate::{motion::cv2_helper::mat_to_yolo_tensor, stream::Frame};
 
 static MODEL_BYTES: &[u8] = include_bytes!("../../../../../yolo26n.onnx");
 static PERSON_CLASS: i32 = 0;

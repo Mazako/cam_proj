@@ -1,6 +1,6 @@
-use derive_new::new;
 use std::time::SystemTime;
 
+use derive_new::new;
 use opencv::core::{Mat, Vec3b};
 
 #[derive(Clone, Debug, PartialEq, new)]

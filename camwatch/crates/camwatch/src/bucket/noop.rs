@@ -1,4 +1,4 @@
-use crate::ports::{BucketUploader, BucketUploaderError, PortFuture, RemoteObject, UploadRequest};
+use super::{BucketFuture, BucketUploader, BucketUploaderError, RemoteObject, UploadRequest};
 
 pub struct NoOpBucketUploader;
 
@@ -6,7 +6,7 @@ impl BucketUploader for NoOpBucketUploader {
     fn upload(
         &self,
         request: UploadRequest,
-    ) -> PortFuture<'_, Result<RemoteObject, BucketUploaderError>> {
+    ) -> BucketFuture<'_, Result<RemoteObject, BucketUploaderError>> {
         Box::pin(async move {
             Ok(RemoteObject {
                 key: format!("noop/{}.mp4", request.event_id),

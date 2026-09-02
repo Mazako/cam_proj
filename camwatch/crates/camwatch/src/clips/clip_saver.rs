@@ -1,6 +1,6 @@
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
-use crate::ports::UploadRequest;
+use crate::bucket::UploadRequest;
 
 use super::{
     clip_manager::ClipJob, clip_store::create_clip_from_segments, clip_uploader::ClipUploadJob,

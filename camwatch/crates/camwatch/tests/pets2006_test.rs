@@ -6,7 +6,7 @@ use std::{
 
 use camwatch::{
     motion::{Mog2MotionDetector, MotionDetector},
-    ports::{Frame, PixelFormat},
+    stream::{Frame, PixelFormat},
 };
 use opencv::{core::MatTraitConst, imgcodecs, prelude::*};
 

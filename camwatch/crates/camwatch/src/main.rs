@@ -4,10 +4,10 @@ use clap::Parser;
 use tracing_subscriber::EnvFilter;
 
 use camwatch::{
+    bucket::BucketUploader,
     bucket::{NoOpBucketUploader, R2Client},
     clips::{ClipManager, create_clip_uploader_worker, create_clip_worker, create_retainer_worker},
     config::{CameraConfig, Config},
-    ports::BucketUploader,
     runtime::CameraRuntime,
     storage::{Database, NewCamera},
     stream::{CameraStatusModel, GstreamerCameraStream, SegmentRecordingConfig},

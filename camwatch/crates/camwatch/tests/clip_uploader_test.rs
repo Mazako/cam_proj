@@ -7,8 +7,8 @@ use std::{
 };
 
 use camwatch::{
+    bucket::{BucketFuture, BucketUploader, BucketUploaderError, RemoteObject, UploadRequest},
     clips::{Clip, ClipUploadJob, create_clip_uploader_worker},
-    ports::{BucketUploader, BucketUploaderError, PortFuture, RemoteObject, UploadRequest},
 };
 
 struct FakeUploader {
@@ -20,7 +20,7 @@ impl BucketUploader for FakeUploader {
     fn upload(
         &self,
         _request: UploadRequest,
-    ) -> PortFuture<'_, Result<RemoteObject, BucketUploaderError>> {
+    ) -> BucketFuture<'_, Result<RemoteObject, BucketUploaderError>> {
         let attempt = self.attempts.fetch_add(1, Ordering::SeqCst) + 1;
         let failures_before_success = self.failures_before_success;
         Box::pin(async move {

@@ -1,13 +1,15 @@
+use std::{future::Future, pin::Pin};
+
 use crate::clips::Clip;
 use thiserror::Error;
 
-use super::PortFuture;
+pub type BucketFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 pub trait BucketUploader: Send + Sync {
     fn upload(
         &self,
         request: UploadRequest,
-    ) -> PortFuture<'_, Result<RemoteObject, BucketUploaderError>>;
+    ) -> BucketFuture<'_, Result<RemoteObject, BucketUploaderError>>;
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

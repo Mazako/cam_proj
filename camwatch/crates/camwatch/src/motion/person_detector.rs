@@ -1,10 +1,14 @@
-use super::{Frame, PortFuture};
+use std::{future::Future, pin::Pin};
+
+use crate::stream::Frame;
+
+pub type PersonDetectorFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 pub trait PersonDetector: Send + Sync {
     fn detect(
         &self,
         frame: &Frame,
-    ) -> PortFuture<'_, Result<Vec<PersonDetection>, PersonDetectorError>>;
+    ) -> PersonDetectorFuture<'_, Result<Vec<PersonDetection>, PersonDetectorError>>;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

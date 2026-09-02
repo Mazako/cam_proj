@@ -1,6 +1,6 @@
 use derive_new::new;
 
-use super::Frame;
+use crate::stream::Frame;
 
 pub trait MotionDetector: Send {
     fn detect(&mut self, frame: &Frame) -> Result<Motion, MotionDetectorError>;

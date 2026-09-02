@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use camwatch::{
     motion::{Mog2MotionDetector, MotionDetector},
-    ports::{CameraStream, CameraStreamEvent},
+    stream::{CameraStream, CameraStreamEvent},
 };
 use tempfile::tempdir;
 

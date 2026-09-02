@@ -3,11 +3,10 @@ use std::{sync::Arc, time::Duration};
 use crate::{
     clips::{ClipManager, store_segment},
     config::{AppConfig, CameraConfig},
-    motion::{Mog2MotionDetector, YoloAnalyzer},
+    motion::{Mog2MotionDetector, MotionDetector, YoloAnalyzer},
     onvif::OnvifConnection,
-    ports::{CameraStream, CameraStreamEvent, CameraStreamStatus, Frame, MotionDetector},
     storage::Database,
-    stream::CameraStatusModel,
+    stream::{CameraStatusModel, CameraStream, CameraStreamEvent, CameraStreamStatus, Frame},
 };
 
 pub struct CameraRuntime<S> {

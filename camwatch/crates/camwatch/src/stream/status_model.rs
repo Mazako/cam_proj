@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::RwLock};
 
-use crate::ports::CameraStreamStatus;
+use super::CameraStreamStatus;
 
 #[derive(Default)]
 pub struct CameraStatusModel {

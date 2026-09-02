@@ -3,9 +3,9 @@ use opencv::{
     video::{self, BackgroundSubtractorMOG2Trait},
 };
 
-use crate::ports::{Frame, Motion, MotionDetector, MotionDetectorError};
+use crate::stream::Frame;
 
-use super::cv2_helper;
+use super::{Motion, MotionDetector, MotionDetectorError, cv2_helper};
 
 const BACKGROUND_LEARNING_FRAMES: usize = 90;
 const MIN_MOTION_AREA: f64 = 1_000.0;

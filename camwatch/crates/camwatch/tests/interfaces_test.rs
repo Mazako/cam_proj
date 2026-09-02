@@ -1,11 +1,14 @@
-use camwatch::ports::{
-    BucketUploader, CameraStream, MotionDetector, PersonDetector, PtzController,
+use camwatch::{
+    bucket::BucketUploader,
+    motion::{MotionDetector, PersonDetector},
+    onvif::PtzController,
+    stream::CameraStream,
 };
 
 fn assert_object_safe<T: ?Sized>() {}
 
 #[test]
-fn all_ports_are_object_safe() {
+fn all_interfaces_are_object_safe() {
     assert_object_safe::<dyn CameraStream>();
     assert_object_safe::<dyn MotionDetector>();
     assert_object_safe::<dyn PersonDetector>();

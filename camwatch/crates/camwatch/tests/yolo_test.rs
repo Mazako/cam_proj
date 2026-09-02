@@ -1,5 +1,11 @@
-use camwatch::{motion::{DetectionClass, YoloAnalyzer}, ports::Frame};
-use opencv::{core::{MatTraitConst, MatTraitConstManual}, imgcodecs::imread};
+use camwatch::{
+    motion::{DetectionClass, YoloAnalyzer},
+    stream::{Frame, PixelFormat},
+};
+use opencv::{
+    core::{MatTraitConst, MatTraitConstManual},
+    imgcodecs::imread,
+};
 
 #[test]
 pub fn should_detect_person() {
@@ -19,13 +25,17 @@ pub fn should_detect_cat() {
     assert!(detections.iter().any(|d| d.confidence >= 0.3));
     assert!(!detections.iter().any(|d| d.confidence < 0.3));
 }
-
-
 pub fn load_frame(path: &str) -> Frame {
     let img = imread(path, opencv::imgcodecs::IMREAD_COLOR).unwrap();
     let size = img.size().unwrap();
     let width = size.width as u32;
     let height = size.height as u32;
     let data = img.data_bytes().unwrap();
-    Frame::new(data.to_vec(), width, height, camwatch::ports::PixelFormat::Bgr8, std::time::SystemTime::now())
+    Frame::new(
+        data.to_vec(),
+        width,
+        height,
+        PixelFormat::Bgr8,
+        std::time::SystemTime::now(),
+    )
 }

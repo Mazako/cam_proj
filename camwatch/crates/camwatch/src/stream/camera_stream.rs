@@ -1,9 +1,13 @@
-use std::{path::PathBuf, time::SystemTime};
+use std::{future::Future, path::PathBuf, pin::Pin, time::SystemTime};
 
-use super::{Frame, PortFuture};
+use super::Frame;
+
+pub type CameraStreamFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 pub trait CameraStream: Send {
-    fn next_event(&mut self) -> PortFuture<'_, Result<CameraStreamEvent, CameraStreamError>>;
+    fn next_event(
+        &mut self,
+    ) -> CameraStreamFuture<'_, Result<CameraStreamEvent, CameraStreamError>>;
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -3,7 +3,7 @@ use std::{sync::Arc, time::Duration};
 use backon::{ExponentialBuilder, Retryable};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
-use crate::ports::{BucketUploader, BucketUploaderError, UploadRequest};
+use crate::bucket::{BucketUploader, BucketUploaderError, RemoteObject, UploadRequest};
 
 pub struct ClipUploadJob {
     pub camera_id: String,
@@ -43,7 +43,7 @@ async fn run_worker(mut rx: UnboundedReceiver<ClipUploadJob>, uploader: Arc<dyn 
 async fn upload_with_retries(
     uploader: Arc<dyn BucketUploader>,
     request: UploadRequest,
-) -> Result<crate::ports::RemoteObject, BucketUploaderError> {
+) -> Result<RemoteObject, BucketUploaderError> {
     let backoff = ExponentialBuilder::default()
         .with_jitter()
         .with_min_delay(Duration::from_secs(1))

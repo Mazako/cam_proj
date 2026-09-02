@@ -8,13 +8,12 @@ use std::{
 use camwatch::{
     clips::ClipManager,
     config::{AppConfig, Config},
-    ports::{
-        CameraStream, CameraStreamError, CameraStreamEvent, CameraStreamStatus, Frame, PixelFormat,
-        PortFuture,
-    },
     runtime::CameraRuntime,
     storage::{Database, NewCamera},
-    stream::CameraStatusModel,
+    stream::{
+        CameraStatusModel, CameraStream, CameraStreamError, CameraStreamEvent, CameraStreamFuture,
+        CameraStreamStatus, Frame, PixelFormat,
+    },
 };
 use tempfile::tempdir;
 
@@ -23,7 +22,9 @@ struct FakeCameraStream {
 }
 
 impl CameraStream for FakeCameraStream {
-    fn next_event(&mut self) -> PortFuture<'_, Result<CameraStreamEvent, CameraStreamError>> {
+    fn next_event(
+        &mut self,
+    ) -> CameraStreamFuture<'_, Result<CameraStreamEvent, CameraStreamError>> {
         let event = self
             .events
             .pop_front()

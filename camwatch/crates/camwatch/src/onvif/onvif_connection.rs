@@ -4,6 +4,8 @@ use oxvif::{OnvifError, OnvifSession};
 
 use crate::config::CameraConfig;
 
+use super::PtzDirection;
+
 const MOVE_DURATION: Duration = Duration::from_millis(200);
 
 pub struct OnvifConnection {
@@ -47,11 +49,4 @@ impl OnvifConnection {
         tokio::time::sleep(MOVE_DURATION).await;
         self.session.ptz_stop(profile_token).await
     }
-}
-
-pub enum PtzDirection {
-    Up(f32),
-    Down(f32),
-    Left(f32),
-    Right(f32),
 }

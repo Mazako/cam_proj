@@ -1,8 +1,7 @@
 use std::{fs, time::Duration};
 
-use camwatch::{
-    ports::CameraStreamError,
-    stream::{GstreamerCameraStream, RtspCodec, SegmentRecordingConfig, build_pipeline},
+use camwatch::stream::{
+    CameraStreamError, GstreamerCameraStream, RtspCodec, SegmentRecordingConfig, build_pipeline,
 };
 use gstreamer::{self as gst, prelude::*};
 use tempfile::tempdir;

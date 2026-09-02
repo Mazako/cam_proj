@@ -18,12 +18,10 @@ use url::Url;
 
 use derive_new::new;
 
-use crate::ports::{
-    CameraStream, CameraStreamError, CameraStreamEvent, CameraStreamStatus, Frame, PixelFormat,
-    PortFuture,
+use super::{
+    CameraStream, CameraStreamError, CameraStreamEvent, CameraStreamFuture, CameraStreamStatus,
+    Frame, PixelFormat, RtspCodec, SegmentRecordingConfig, build_pipeline,
 };
-
-use super::{RtspCodec, SegmentRecordingConfig, build_pipeline};
 
 const EVENT_BUFFER_CAPACITY: usize = 8;
 
@@ -98,7 +96,9 @@ impl GstreamerCameraStream {
 }
 
 impl CameraStream for GstreamerCameraStream {
-    fn next_event(&mut self) -> PortFuture<'_, Result<CameraStreamEvent, CameraStreamError>> {
+    fn next_event(
+        &mut self,
+    ) -> CameraStreamFuture<'_, Result<CameraStreamEvent, CameraStreamError>> {
         Box::pin(async move {
             self.receiver
                 .recv()

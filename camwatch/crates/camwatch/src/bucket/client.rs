@@ -1,12 +1,12 @@
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::{Client, config::Credentials, primitives::ByteStream};
 
-use crate::{
-    config::AppConfig,
-    ports::{BucketUploader, BucketUploaderError, PortFuture, RemoteObject, UploadRequest},
-};
+use crate::config::AppConfig;
 
-use super::{R2Config, R2Error};
+use super::{
+    BucketFuture, BucketUploader, BucketUploaderError, R2Config, R2Error, RemoteObject,
+    UploadRequest,
+};
 
 pub struct R2Client {
     client: Client,
@@ -74,7 +74,7 @@ impl BucketUploader for R2Client {
     fn upload(
         &self,
         request: UploadRequest,
-    ) -> PortFuture<'_, Result<RemoteObject, BucketUploaderError>> {
+    ) -> BucketFuture<'_, Result<RemoteObject, BucketUploaderError>> {
         Box::pin(async move {
             self.upload_clip(request)
                 .await

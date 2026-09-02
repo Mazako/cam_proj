@@ -1,6 +1,6 @@
 use std::time::SystemTime;
 
-use camwatch::{ports::CameraStreamStatus, stream::CameraStatusModel};
+use camwatch::stream::{CameraStatusModel, CameraStreamStatus};
 
 #[test]
 fn stores_the_latest_status_for_each_camera() {

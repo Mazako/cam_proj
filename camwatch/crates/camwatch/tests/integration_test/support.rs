@@ -6,9 +6,11 @@ use std::{
 };
 
 use camwatch::{
-    ports::{CameraStream, CameraStreamEvent, CameraStreamStatus},
     storage::{Database, NewCamera},
-    stream::{GstreamerCameraStream, RtspCodec, SegmentRecordingConfig},
+    stream::{
+        CameraStream, CameraStreamEvent, CameraStreamStatus, GstreamerCameraStream, RtspCodec,
+        SegmentRecordingConfig,
+    },
 };
 use testcontainers::{
     ContainerAsync, GenericImage, ImageExt, core::IntoContainerPort, runners::AsyncRunner,
