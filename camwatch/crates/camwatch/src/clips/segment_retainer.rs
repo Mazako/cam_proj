@@ -29,8 +29,7 @@ pub async fn retain_expired_segments(
     rolling_buffer_seconds: u64,
     clip_manager: &ClipManager,
 ) {
-    let Some(before) =
-        SystemTime::now().checked_sub(Duration::from_secs(rolling_buffer_seconds))
+    let Some(before) = SystemTime::now().checked_sub(Duration::from_secs(rolling_buffer_seconds))
     else {
         return;
     };

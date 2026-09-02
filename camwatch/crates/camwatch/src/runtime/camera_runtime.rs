@@ -101,9 +101,9 @@ where
                                     Duration::from_secs(self.post_event_seconds),
                                 )
                                 .await
-                            {
-                                tracing::warn!(camera_id = self.camera_config.id.as_str(), %error, "clip could not be started");
-                            }
+                        {
+                            tracing::warn!(camera_id = self.camera_config.id.as_str(), %error, "clip could not be started");
+                        }
                     }
                 },
                 Ok(CameraStreamEvent::SegmentFinalized {

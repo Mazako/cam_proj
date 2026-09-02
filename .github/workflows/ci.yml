@@ -3,6 +3,7 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -45,6 +46,20 @@ jobs:
 
       - name: Run tests
         run: cargo test --workspace -- --test-threads=1
+
+      - name: Run full R2 integration test
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          CAMWATCH_R2_ENDPOINT: ${{ secrets.CAMWATCH_R2_ENDPOINT }}
+          CAMWATCH_R2_ACCESS_KEY_ID: ${{ secrets.CAMWATCH_R2_ACCESS_KEY_ID }}
+          CAMWATCH_R2_SECRET_ACCESS_KEY: ${{ secrets.CAMWATCH_R2_SECRET_ACCESS_KEY }}
+          CAMWATCH_R2_BUCKET: ${{ secrets.CAMWATCH_R2_BUCKET }}
+          CAMWATCH_R2_PREFIX: ci/
+          CAMWATCH_R2_REGION: auto
+        run: >-
+          cargo test --test integration_test
+          records_assembles_and_uploads_a_clip_to_r2
+          -- --ignored --test-threads=1
 
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings

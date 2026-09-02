@@ -1,0 +1,589 @@
+# Camwatch — specyfikacja backendu SSR
+
+## Cel dokumentu
+
+Ten dokument jest zleceniem implementacyjnym dla backendu Camwatch. Opisuje docelową architekturę, granice crate'ów, widoki SSR, logowanie, API między warstwami, zasady bezpieczeństwa i kolejność prac.
+
+Nie należy zmieniać decyzji opisanych niżej bez potwierdzenia właściciela projektu.
+
+## Decyzje już podjęte
+
+- Backend HTTP jest osobnym crate'em.
+- Obecny crate `camwatch` jest importowaną biblioteką z logiką domenową i integracjami.
+- UI jest renderowane po stronie serwera.
+- Nie używamy Reacta, Next.js, SPA, WASM ani hydration.
+- Podstawowy stack SSR to `axum` + `askama`.
+- `htmx` jest częścią panelu i służy do częściowego odświeżania HTML.
+- Nie prowadzimy historii zdarzeń ani uploadów.
+- Lifecycle klipu i uploadu działa wyłącznie w pamięci procesu.
+- SQLite przechowuje kamery i segmenty bufora, ale nie eventy ani uploady.
+- PTZ nie ma osobnego traita `PtzController`. Możliwości PTZ są sprawdzane przy starcie, a sterowanie jest wykonywane przez `OnvifConnection` ukrytą wewnątrz crate'a `camwatch`.
+- R2 jest opcjonalne. Worker wykonuje maksymalnie trzy próby uploadu; po restarcie procesu nie ma trwałej kolejki ani wznowienia.
+- Sesje użytkowników są in-memory i po restarcie aplikacji użytkownik loguje się ponownie.
+- Zapis edycji kamery od razu przeładowuje wyłącznie runtime tej kamery.
+- Panel ma obsługiwać HLS w Safari, Chrome i Firefox przez lokalnie serwowany `hls.js`.
+- Gdy oba envy logowania nie są ustawione, lokalny panel używa domyślnych danych `admin` / `admin`.
+
+## Wybór SSR
+
+### Rekomendacja
+
+Użyć `axum` jako serwera HTTP i routera oraz `askama` jako silnika szablonów.
+
+- Axum działa natywnie z Tokio, ma routing, extractory, middleware Tower oraz naturalny model współdzielonego stanu.
+- Askama renderuje typowane szablony podobne do Jinja podczas kompilacji. Nie wymaga JavaScriptu, bundlera ani osobnej aplikacji frontendowej.
+- `askama_web` zapewnia bezpośrednią integrację odpowiedzi Askama z Axum.
+
+Źródła:
+
+- [Axum](https://docs.rs/axum/latest/axum/)
+- [Askama](https://askama.rs/en/stable/doc/askama/index.html)
+- [Askama Web dla Axum](https://docs.rs/askama_web/latest/askama_web/)
+
+### Dlaczego nie Leptos
+
+Leptos jest sensownym, pełnym frameworkiem SSR w Rust i może działać jako MPA. Wprowadza jednak własny model komponentów, reaktywności i opcjonalnej hydracji. Dla panelu administracyjnego Camwatch, z klasycznymi stronami, formularzami i kilkoma przyciskami PTZ, byłby dodatkową warstwą bez wyraźnej korzyści.
+
+Nie należy go dodawać do tego zadania.
+
+### htmx w panelu
+
+Panel używa `htmx` do dynamicznych interakcji, ale pozostaje aplikacją SSR:
+
+- pierwsze wejście na trasę zawsze zwraca pełną stronę HTML z Askama;
+- htmx pobiera wyłącznie fragmenty HTML i podmienia je w DOM;
+- serwer nie zwraca JSON dla własnego UI;
+- nie ma osobnej aplikacji frontendowej, bundlera ani stanu klienta;
+- formularze i linki powinny mieć zwykły wariant HTTP jako fallback, gdy JavaScript jest wyłączony.
+
+htmx obsługuje odświeżanie kart kamer, statusu i aktywności klipu, wysyłanie formularzy oraz przyciski PTZ. [Dokumentacja htmx](https://htmx.org/docs/)
+
+## Docelowy układ workspace
+
+```text
+camwatch/
+├── Cargo.toml
+└── crates/
+    ├── camwatch/
+    │   ├── src/
+    │   │   ├── application/
+    │   │   ├── bucket/
+    │   │   ├── clips/
+    │   │   ├── config/
+    │   │   ├── motion/
+    │   │   ├── onvif/
+    │   │   ├── runtime/
+    │   │   ├── storage/
+    │   │   └── stream/
+    │   └── Cargo.toml
+    └── camwatch-server/
+        ├── src/
+        │   ├── auth/
+        │   ├── routes/
+        │   ├── views/
+        │   ├── app_state.rs
+        │   ├── error.rs
+        │   ├── router.rs
+        │   └── main.rs
+        ├── templates/
+        ├── static/
+        └── Cargo.toml
+```
+
+W rootowym `Cargo.toml` należy dodać `crates/camwatch-server` do `workspace.members`.
+
+`camwatch-server` ma zależność pathową na `camwatch`:
+
+```toml
+camwatch = { path = "../camwatch" }
+```
+
+## Odpowiedzialność crate'ów
+
+### `camwatch`
+
+Crate biblioteczny. Nie może zależeć od Axum, Askama, HTML, ciasteczek, sesji ani szczegółów HTTP.
+
+Odpowiada za:
+
+- ładowanie i walidację konfiguracji runtime'u;
+- otwarcie SQLite i bootstrap kamer;
+- uruchomienie runtime'ów kamer;
+- RTSP, segmenty, detekcję ruchu i YOLO;
+- składanie klipów;
+- worker R2 i retencję segmentów;
+- odczyt możliwości PTZ przy uruchamianiu kamery;
+- publiczny, bezpieczny dla backendu odczyt statusu kamery i wykonanie komendy PTZ;
+- kontrolowane zamknięcie workerów.
+
+Nie należy wystawiać backendowi `Database`, `GstreamerCameraStream`, `OnvifConnection`, `OnvifSession`, kanałów workerów ani prywatnych modeli storage.
+
+### `camwatch-server`
+
+Crate binarny. Odpowiada wyłącznie za HTTP i prezentację:
+
+- parsowanie CLI serwera i uruchomienie logowania;
+- uruchomienie `camwatch` oraz trzymanie zwróconego handle'a;
+- Axum router, middleware, uwierzytelnienie i sesje;
+- renderowanie pełnych stron oraz fragmentów HTML dla htmx;
+- serwowanie własnych statycznych assetów CSS/JS;
+- mapowanie błędów domenowych na odpowiedzi HTTP;
+- nieujawnianie sekretów i danych wewnętrznych runtime'u.
+
+## Refactor wymagany w `camwatch`
+
+Obecne `src/main.rs` wykonuje bootstrap, uruchamia workery i spawn'uje `CameraRuntime`. Tę logikę trzeba przenieść z binarki do publicznej warstwy aplikacyjnej, przykładowo `camwatch::application`.
+
+Proponowane typy publiczne:
+
+```rust
+pub struct CamwatchService;
+pub struct CamwatchHandle;
+pub struct CameraSummary;
+pub struct CameraDetails;
+pub struct CameraActivity;
+pub enum PtzDirection;
+pub enum CamwatchApplicationError;
+```
+
+Nazwy mogą zostać lekko poprawione podczas implementacji, ale granica odpowiedzialności ma pozostać taka sama.
+
+Proponowany kontrakt:
+
+```rust
+impl CamwatchService {
+    pub async fn start(config: Config) -> Result<CamwatchHandle, CamwatchApplicationError>;
+}
+
+impl CamwatchHandle {
+    pub fn list_cameras(&self) -> Vec<CameraSummary>;
+    pub fn camera(&self, id: &CameraId) -> Option<CameraDetails>;
+    pub async fn create_camera(
+        &self,
+        input: CameraInput,
+    ) -> Result<CameraDetails, CamwatchApplicationError>;
+    pub async fn update_camera(
+        &self,
+        id: &CameraId,
+        input: CameraInput,
+    ) -> Result<CameraDetails, CamwatchApplicationError>;
+    pub async fn delete_camera(
+        &self,
+        id: &CameraId,
+    ) -> Result<(), CamwatchApplicationError>;
+    pub async fn move_ptz(
+        &self,
+        id: &CameraId,
+        direction: PtzDirection,
+    ) -> Result<(), CamwatchApplicationError>;
+    pub async fn shutdown(self) -> Result<(), CamwatchApplicationError>;
+}
+```
+
+`CameraSummary` i `CameraDetails` są modelami odczytu dla UI. Nie mogą być bezpośrednimi modelami SQLx ani GStreamera.
+
+Minimalne dane widoczne z backendu:
+
+- `id` i nazwa kamery;
+- status `online` lub `offline` oraz czas ostatniej zmiany;
+- flaga `ptz_available`;
+- informacja, czy trwa składanie klipu;
+- informacja, czy upload jest aktualnie wykonywany oraz wynik ostatniej próby w bieżącym życiu procesu;
+- ścieżka lub identyfikator playlisty HLS, gdy VID-04 będzie gotowe.
+
+### Rejestr kamer
+
+Należy dodać in-memory rejestr kamer dostępny przez `CamwatchHandle`.
+
+Powód: obecny `CameraStatusModel` umie odczytać status po ID, ale nie potrafi listować kamer, a `OnvifConnection` jest własnością `CameraRuntime`. Backend potrzebuje jednego, stabilnego wejścia do listy kamer, ich statusu oraz PTZ.
+
+Rejestr powinien:
+
+- zostać utworzony z konfiguracji kamer przy starcie;
+- przechowywać metadane kamery i współdzielony stan runtime'u;
+- aktualizować statusy po zdarzeniach RTSP;
+- zapamiętać wynik wykrycia PTZ z momentu startu;
+- serializować komendy PTZ dla jednej kamery;
+- nie utrwalać historii eventów ani uploadów.
+
+Backend ma wywoływać wyłącznie `CamwatchHandle::move_ptz`, nigdy `OnvifConnection` bezpośrednio.
+
+### CRUD kamer przez panel
+
+CRUD kamer jest częścią docelowego panelu. TOML służy wyłącznie do pierwszego bootstrapu pustej bazy; po inicjalizacji SQLite jest źródłem prawdy dla kamer widocznych oraz edytowanych przez UI.
+
+Przed implementacją formularzy należy uzupełnić trwały model kamery o wszystkie pola potrzebne do odtworzenia runtime'u. Obecna tabela `cameras` nie zawiera przynajmniej `rtsp_codec` i `clip_after_motion`, więc nie wystarcza do pełnej edycji kamery z panelu.
+
+`CameraInput` powinien obejmować:
+
+- identyfikator kamery;
+- nazwę;
+- referencję env URL-a RTSP;
+- kodek RTSP;
+- URL ONVIF oraz referencję env danych ONVIF, jako parę opcjonalną;
+- próg pola ruchu;
+- próg pewności YOLO;
+- `clip_after_motion`.
+
+Formularz nie przyjmuje sekretów RTSP ani ONVIF. Przyjmuje wyłącznie nazwy zmiennych środowiskowych, które są walidowane tak samo jak konfiguracja TOML.
+
+Po utworzeniu, edycji lub usunięciu kamery `CamwatchHandle` ma wykonać tę operację w SQLite oraz od razu zsynchronizować runtime bez restartu całej aplikacji:
+
+1. zwalidować wejście;
+2. zapisać zmianę w bazie;
+3. zatrzymać poprzedni runtime danej kamery, gdy istnieje;
+4. utworzyć nowy runtime z danych zapisanych w SQLite;
+5. zaktualizować rejestr kamer oraz status widoczny przez UI;
+6. zwrócić kontrolowany błąd, jeśli runtime nie może zostać uruchomiony.
+
+Usunięcie kamery powinno być soft-delete zgodne z istniejącym `deleted_at`, zatrzymać runtime i usunąć kamerę z rejestru widocznego w panelu. Nie usuwać automatycznie plików segmentów ani lokalnych klipów bez osobnej decyzji.
+
+### PTZ w pierwszej wersji
+
+Obecne `cam_move` wykonuje bezpieczny ruch przez około 200 ms, a następnie wysyła `Stop`.
+
+Pierwsza wersja UI ma mieć cztery przyciski: góra, dół, lewo, prawo. Jedno kliknięcie oznacza jeden krótki ruch. Nie implementować sterowania typu „przytrzymaj przycisk”, dopóki nie powstanie osobny, przetestowany model `start`/`stop` i ograniczanie równoległych komend.
+
+Jeżeli kamera nie ma PTZ, kontrolki są ukryte, a endpoint nadal odmawia komendy odpowiedzią kontrolowaną przez serwer.
+
+## Backend HTTP i SSR
+
+### Zależności serwera
+
+Docelowo potrzebne będą co najmniej:
+
+- `axum`;
+- `askama`;
+- `askama_web` z integracją Axum;
+- `tower-http` dla request tracingu, bezpiecznych nagłówków i serwowania assetów;
+- `tower-sessions` oraz in-memory store sesji;
+- crate do kryptograficznego generowania identyfikatorów sesji, jeżeli nie zapewni go wybrany store;
+- `subtle` lub równoważny mechanizm stałoczasowego porównania hasła.
+
+Wersje należy wybrać zgodnie z aktualnym, kompatybilnym ekosystemem Axum podczas implementacji. Nie dopisywać przestarzałych bibliotek sesji tylko dlatego, że pasują do starego przykładu z Internetu.
+
+### `AppState`
+
+Stan Axum powinien być mały i klonowalny:
+
+```rust
+pub struct AppState {
+    pub camwatch: Arc<CamwatchHandle>,
+    pub auth: Arc<AuthService>,
+}
+```
+
+`AppState` nie zawiera haseł w postaci możliwej do zalogowania ani `Database`.
+
+### Routing
+
+Publiczne endpointy:
+
+| Metoda | Ścieżka | Rola |
+| --- | --- | --- |
+| GET | `/login` | Formularz logowania |
+| POST | `/login` | Weryfikacja danych i utworzenie sesji |
+| GET | `/assets/*path` | CSS oraz ewentualny mały JS lokalny |
+
+Endpointy wymagające sesji:
+
+| Metoda | Ścieżka | Rola |
+| --- | --- | --- |
+| GET | `/` | Redirect do `/cameras` |
+| GET | `/cameras` | Lista kamer |
+| GET | `/cameras/new` | Formularz dodania kamery |
+| POST | `/cameras` | Utworzenie kamery |
+| GET | `/cameras/:camera_id` | Szczegóły kamery |
+| GET | `/cameras/:camera_id/edit` | Formularz edycji kamery |
+| POST | `/cameras/:camera_id` | Zapis edycji kamery |
+| POST | `/cameras/:camera_id/delete` | Soft-delete kamery i zatrzymanie runtime'u |
+| POST | `/cameras/:camera_id/ptz/:direction` | Krótki ruch PTZ |
+| POST | `/logout` | Unieważnienie sesji i redirect do `/login` |
+
+Endpointy fragmentów htmx:
+
+| Metoda | Ścieżka | Rola |
+| --- | --- | --- |
+| GET | `/fragments/cameras` | Karty kamer bez pełnego layoutu |
+| GET | `/fragments/cameras/:camera_id/status` | Status pojedynczej kamery |
+| GET | `/fragments/cameras/:camera_id/activity` | Bieżący stan klipu/uploadu |
+
+Handler PTZ oraz formularze edycji kamery rozpoznają nagłówek `HX-Request`: dla htmx zwracają zaktualizowany fragment HTML, a dla zwykłego formularza wykonują redirect po POST.
+
+Nie tworzyć publicznego REST API ani odpowiedzi JSON wyłącznie po to, aby zasilać własny SSR. Jeśli kiedyś pojawi się zewnętrzna integracja, API będzie osobnym zadaniem i osobnym kontraktem.
+
+## Widoki
+
+### 1. Logowanie — `/login`
+
+Elementy:
+
+- login;
+- hasło;
+- komunikat „Nieprawidłowy login lub hasło” bez wskazywania, które pole było błędne;
+- brak szczegółów konfiguracji, stack trace'ów i informacji o kamerach.
+
+Zalogowany użytkownik, który otworzy `/login`, ma zostać przekierowany do `/cameras`.
+
+### 2. Lista kamer — `/cameras`
+
+To jest główny dashboard MVP.
+
+Każda karta kamery zawiera:
+
+- nazwę;
+- identyfikator techniczny;
+- status online/offline;
+- czas ostatniej zmiany statusu;
+- oznaczenie PTZ, jeżeli jest dostępne;
+- informację „trwa składanie klipu” lub „trwa upload”, jeśli dotyczy;
+- link do szczegółów.
+
+Na stronie można dodać lekki ogólny status procesu: liczba kamer online/offline oraz status R2 w bieżącym procesie. Nie tworzyć tabeli historii zdarzeń.
+
+### 3. Szczegóły kamery — `/cameras/:camera_id`
+
+Elementy:
+
+- breadcrumb lub link powrotu do listy;
+- nazwa i status kamery;
+- obszar live preview HLS, gdy VID-04 będzie gotowe;
+- komunikat o niedostępnym strumieniu;
+- panel PTZ z czterema przyciskami tylko dla kamer z `ptz_available = true`;
+- bieżący, ulotny stan klipu i uploadu;
+- czytelny komunikat po błędzie PTZ lub uploadu.
+
+Nie wyświetlać historii eventów, archiwum klipów ani listy dawnych uploadów.
+
+### 4. Dodanie i edycja kamery — `/cameras/new`, `/cameras/:camera_id/edit`
+
+Formularz zawiera wszystkie pola `CameraInput`, a po zapisie zwraca użytkownika do szczegółów kamery lub listy kamer.
+
+Walidacja jest wykonywana po stronie serwera. Przy żądaniu htmx błędne pola są odświeżane jako fragment formularza; bez JavaScriptu serwer renderuje pełną stronę z błędami.
+
+Formularz nie pokazuje wartości sekretów. Widoczne są wyłącznie referencje env, np. `CAMWATCH_FRONT_DOOR_RTSP_URL`.
+
+Usunięcie kamery wymaga osobnego formularza POST z tokenem CSRF i potwierdzeniem w UI.
+
+### 5. Strony błędów
+
+Potrzebne są także renderowane SSR:
+
+- 404 dla nieistniejącej kamery;
+- 403 dla braku autoryzacji lub niepoprawnego tokenu CSRF;
+- 409 dla PTZ niedostępnego dla danej kamery;
+- 500 z generycznym komunikatem dla nieoczekiwanego błędu.
+
+Szczegóły błędu trafiają wyłącznie do `tracing`, nigdy do HTML.
+
+## Szablony i modele widoku
+
+Askama ma renderować pliki z `crates/camwatch-server/templates/`.
+
+Proponowany układ:
+
+```text
+templates/
+├── layouts/
+│   └── base.html
+├── auth/
+│   └── login.html
+├── cameras/
+│   ├── index.html
+│   └── show.html
+├── components/
+│   ├── camera_card.html
+│   ├── camera_status.html
+│   ├── camera_activity.html
+│   └── ptz_controls.html
+└── errors/
+    ├── forbidden.html
+    ├── not_found.html
+    └── internal.html
+```
+
+Zgodnie z konwencją projektu każdy publiczny `struct`, `enum` i jego implementacja mają własny plik. Dotyczy to również modeli widoku, np.:
+
+```text
+src/views/
+├── camera_activity_view.rs
+├── camera_details_view.rs
+├── camera_list_item_view.rs
+├── camera_list_view.rs
+├── login_view.rs
+└── ptz_controls_view.rs
+```
+
+Szablon nie może wykonywać logiki domenowej. Handler pobiera dane z `CamwatchHandle`, buduje prosty model widoku, a Askama tylko go renderuje.
+
+## Logowanie i sesje
+
+### Konfiguracja użytkownika
+
+Wymagane są dwa sekrety środowiskowe:
+
+```text
+CAMWATCH_USER_LOGIN
+CAMWATCH_USER_PASSWORD
+```
+
+Nazwy są celowo zapisane wielkimi literami i są zgodne z istniejącą konwencją `CAMWATCH_R2_*`. Systemowe nazwy env są case-sensitive.
+
+Zasady:
+
+- gdy oba envy są nieustawione, użyć lokalnego fallbacku `admin` / `admin`;
+- gdy ustawione jest tylko jedno z dwóch env, serwer kończy start czytelnym błędem;
+- pusta wartość ustawionego env powoduje błąd startu bez wypisania sekretu;
+- wartości są odczytywane raz przy starcie;
+- nie wolno implementować fallbacku do TOML, SQLite ani argumentów CLI;
+- login i hasło nie mogą trafić do `Debug`, `Display`, logów, komunikatów HTTP ani test snapshots.
+
+Domyślne `admin` / `admin` jest dopuszczalne wyłącznie dlatego, że panel MVP bezwzględnie binduje się do loopbacka. Nie wolno później umożliwić bindu do LAN bez usunięcia fallbacku albo wymuszenia ustawionych env.
+
+### Czy hashowanie hasła jest potrzebne?
+
+Nie w obecnym modelu.
+
+Hasła nie zapisujemy w bazie ani pliku — jego źródłem jest env procesu. Argon2 jest potrzebny wtedy, gdy aplikacja przechowuje hash hasła i później weryfikuje podane hasło wobec tego hasha. Tutaj nie ma niczego trwałego do hashownia.
+
+Nadal należy:
+
+- porównywać hasło w czasie stałym;
+- nie logować hasła;
+- przy ustawionym `CAMWATCH_USER_PASSWORD` zalecać silne hasło, ponieważ chroni ono panel;
+- używać HTTPS przy dostępie spoza localhost;
+- nie przechowywać identyfikatorów sesji w `localStorage` ani w URL.
+
+### Sesja
+
+Użyć sesji serwerowej w pamięci procesu, zarządzanej przez `tower-sessions` z in-memory store.
+
+Przeglądarka dostaje wyłącznie losowy, nieprzezroczysty identyfikator sesji w ciasteczku. Stan sesji zostaje po stronie serwera. Restart aplikacji celowo unieważnia wszystkie sesje; użytkownik po restarcie loguje się ponownie. Jest to zgodne z podejściem in-memory i nie wymaga trzeciego sekretu środowiskowego.
+
+Sesja wygasa po jednej godzinie bezczynności. Każde poprawne, uwierzytelnione żądanie może odnowić licznik bezczynności do jednej godziny.
+
+Panel MVP jest dostępny wyłącznie na loopbackie (`127.0.0.1` lub `::1`). Serwer ma odrzucać konfigurację wiążącą go z adresem LAN lub publicznym. W tym lokalnym trybie cookie nie może mieć flagi `Secure`, ponieważ przeglądarka nie wyśle go po zwykłym HTTP.
+
+Wymagane parametry ciasteczka lokalnego:
+
+- `HttpOnly`;
+- `SameSite=Strict`;
+- `Path=/`;
+- bez atrybutu `Domain`;
+- krótki TTL oraz unieważnienie przy logout.
+
+Jeśli kiedyś panel zostanie wystawiony poza localhost, przed zmianą adresu bind należy wprowadzić HTTPS, ustawić `Secure` i użyć cookie z prefiksem `__Host-`.
+
+Wymagane parametry ciasteczka w środowisku HTTPS:
+
+- `HttpOnly`;
+- `Secure`;
+- `SameSite=Strict`;
+- `Path=/`;
+- bez atrybutu `Domain`;
+- krótki TTL oraz unieważnienie przy logout.
+
+Przy HTTPS użyć nazwy z prefiksem `__Host-`, np. `__Host-camwatch-session`.
+
+`SameSite` jest tylko dodatkową ochroną. Wszystkie mutujące żądania POST, w tym logout i PTZ, muszą mieć token CSRF albo równoważną, świadomie zaimplementowaną ochronę.
+
+Źródła:
+
+- [OWASP Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)
+- [tower-sessions](https://docs.rs/tower-sessions/latest/tower_sessions/)
+- [OWASP CSRF Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)
+
+### Przepływ logowania
+
+1. Użytkownik otwiera `GET /login`.
+2. Serwer renderuje formularz z tokenem CSRF.
+3. `POST /login` odbiera login i hasło.
+4. Serwer porównuje login oraz hasło, bez rozróżniania komunikatu błędu.
+5. Przy sukcesie tworzy świeżą sesję, ustawia cookie i robi redirect do `/cameras`.
+6. Przy błędzie renderuje formularz z generycznym komunikatem.
+7. `POST /logout` unieważnia sesję, usuwa cookie i przekierowuje do `/login`.
+
+Należy dodać limit prób logowania na IP lub przynajmniej opóźnienie po serii błędów. Jest to panel do kamer, więc brute force nie może być ignorowany tylko dlatego, że aplikacja działa w LAN.
+
+## HLS i assety
+
+Aktualny runtime nie udostępnia jeszcze HLS; widok kamery ma przygotować miejsce na tę funkcję, ale odtwarzacz zależy od taska VID-04.
+
+Nie wystawiać całego katalogu `data/` przez `ServeDir`. W przyszłości HLS musi być serwowane przez ograniczone, uwierzytelnione endpointy, które mapują znane `camera_id` na właściwy katalog playlisty. Nie wolno przyjmować ścieżki pliku od użytkownika.
+
+HLS ma różne wsparcie przeglądarek. Safari odtwarza je natywnie, natomiast Chrome i Firefox zwykle potrzebują małego klienta `hls.js`. `hls.js` jest wymaganym elementem panelu i ma być serwowany lokalnie; nie zmienia to architektury SSR ani nie tworzy SPA.
+
+CSS i `hls.js` należy trzymać lokalnie w `crates/camwatch-server/static/`, bez CDN.
+
+## Obsługa błędów i logowanie
+
+- Błędy uruchomienia `camwatch` kończą start serwera czytelnym komunikatem administracyjnym, bez sekretów.
+- Brak jednej kamery RTSP nie kończy działania backendu; kamera jest prezentowana jako offline.
+- Błąd PTZ jest logowany po stronie serwera i pokazany użytkownikowi jako ogólny komunikat.
+- Błąd R2 nie pokazuje credentiali, endpointu ani pełnych szczegółów SDK.
+- Każdy request ma trace ID lub request ID w logu.
+- Nie logować ciała formularza loginu, nagłówka `Cookie`, `Set-Cookie`, haseł, tokenów CSRF, adresów RTSP ani sekretów R2.
+
+## Testy wymagane
+
+### `camwatch`
+
+- `CamwatchService::start` buduje publiczny handle bez Axum.
+- Rejestr kamer poprawnie listuje kamery i ich statusy.
+- Utworzenie, edycja i soft-delete kamery synchronizują SQLite oraz rejestr runtime'u.
+- Edycja jednej kamery nie zatrzymuje pozostałych runtime'ów.
+- Kamera bez PTZ nie otrzymuje możliwości sterowania.
+- Komenda PTZ jest serializowana dla jednej kamery.
+- Lifecycle klipu/uploadu pozostaje in-memory i nie tworzy tabel eventów/uploadów.
+
+### `camwatch-server`
+
+- niezalogowany użytkownik jest przekierowany do `/login` dla każdej chronionej ścieżki;
+- poprawne dane tworzą sesję, niepoprawne nie tworzą;
+- brak obu env logowania pozwala na lokalne logowanie `admin` / `admin`;
+- ustawienie tylko jednego env logowania kończy start bez ujawnienia wartości;
+- cookie ma właściwe atrybuty w lokalnym trybie loopback;
+- sesja wygasa po godzinie bezczynności;
+- logout unieważnia sesję;
+- formularze POST odrzucają niepoprawny token CSRF;
+- lista kamer renderuje HTML z danymi testowego handle'a;
+- formularze dodania i edycji kamery renderują błędy walidacji bez utraty danych jawnych;
+- nieistniejąca kamera zwraca SSR 404;
+- PTZ dla kamery bez PTZ jest odrzucone;
+- błąd PTZ renderuje bezpieczny komunikat;
+- widok kamery używa natywnego HLS w Safari i lokalnego `hls.js` w Chrome oraz Firefox;
+- odpowiedzi i logi testowe nie zawierają loginu, hasła ani wartości cookie.
+
+Testy HTTP powinny działać bez GStreamera, kamery, ONVIF, R2 ani prawdziwej bazy danych. Integracje runtime'u pozostają w testach crate'a `camwatch`.
+
+## Kolejność implementacji
+
+1. Dodać `camwatch-server` do workspace'u z pustym `GET /health`.
+2. Wydzielić bootstrap obecnego `camwatch/src/main.rs` do `CamwatchService::start` i `CamwatchHandle`.
+3. Dodać in-memory rejestr kamer i odczytowe modele UI w crate'ie `camwatch`.
+4. Dodać Axum router, `AppState`, obsługę błędów i bazowy layout Askama.
+5. Dodać logowanie, sesje, middleware autoryzacji, CSRF oraz logout.
+6. Zaimplementować `/cameras` i `/cameras/:camera_id` bez HLS.
+7. Dodać CRUD kamer w SQLite wraz z kontrolowanym przeładowaniem pojedynczego runtime'u.
+8. Udostępnić bezpieczny endpoint PTZ jako krótkie ruchy.
+9. Dodać endpointy htmx do odświeżania statusów, aktywności, formularzy i odpowiedzi PTZ.
+10. Po ukończeniu VID-04 dodać chronione HLS do widoku kamery.
+11. Osobno wykonać testy R2 opisane w backlogu.
+
+Po każdym etapie uruchomić co najmniej `cargo check`, właściwe testy crate'a, `cargo clippy -- -D warnings` i `git diff --check`.
+
+## Poza zakresem pierwszego wdrożenia
+
+- historia zdarzeń i uploadów;
+- archiwum klipów;
+- trwałe sesje i automatyczne odtwarzanie sesji po restarcie;
+- wielu użytkowników, role i reset hasła;
+- zewnętrzne OAuth/OIDC;
+- publiczne REST API;
+- ciągłe sterowanie PTZ przy przytrzymaniu przycisku;
+- CDN dla assetów;
+- aplikacja mobilna.
+
+## Otwarte pytania do decyzji
+
+Brak decyzji blokujących implementację backendu.
