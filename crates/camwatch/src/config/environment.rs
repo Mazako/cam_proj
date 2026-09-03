@@ -6,6 +6,14 @@ use serde::{Deserialize, Deserializer};
 pub struct EnvironmentVariableName(String);
 
 impl EnvironmentVariableName {
+    pub fn parse(value: String) -> Result<Self, &'static str> {
+        if is_environment_variable_name(&value) {
+            Ok(Self(value))
+        } else {
+            Err("invalid environment variable name")
+        }
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }

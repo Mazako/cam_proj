@@ -57,10 +57,11 @@ pub(crate) fn unix_time_millis(time: SystemTime) -> Option<i64> {
 impl Database {
     pub async fn list_cameras(&self) -> Result<Vec<Camera>, StorageError> {
         query_as::<_, Camera>(
-            "SELECT id, name, enabled, rtsp_url_env, onvif_url, onvif_credentials_env,
-                    motion_min_area, yolo_confidence, created_at, updated_at, deleted_at
+            "SELECT id, name, enabled, rtsp_url_env, rtsp_codec, onvif_url,
+                    onvif_credentials_env, motion_min_area, yolo_confidence,
+                    clip_after_motion, created_at, updated_at, deleted_at
              FROM cameras
-             WHERE deleted_at IS NULL
+             WHERE deleted_at IS NULL AND enabled = 1
              ORDER BY name, id",
         )
         .fetch_all(&self.pool)
@@ -68,24 +69,39 @@ impl Database {
         .map_err(StorageError::Database)
     }
 
-    pub async fn seed_cameras(&self, cameras: &[NewCamera]) -> Result<(), StorageError> {
+    pub async fn upsert_cameras(&self, cameras: &[NewCamera]) -> Result<(), StorageError> {
         let now = unix_time_millis(SystemTime::now()).unwrap_or_default();
         let mut transaction = self.pool.begin().await.map_err(StorageError::Database)?;
 
         for camera in cameras {
             sqlx::query(
                 "INSERT INTO cameras (
-                    id, name, enabled, rtsp_url_env, onvif_url, onvif_credentials_env,
-                    motion_min_area, yolo_confidence, created_at, updated_at
-                ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?)",
+                    id, name, enabled, rtsp_url_env, rtsp_codec, onvif_url,
+                    onvif_credentials_env, motion_min_area, yolo_confidence,
+                    clip_after_motion, created_at, updated_at
+                ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name = excluded.name,
+                    enabled = excluded.enabled,
+                    rtsp_url_env = excluded.rtsp_url_env,
+                    rtsp_codec = excluded.rtsp_codec,
+                    onvif_url = excluded.onvif_url,
+                    onvif_credentials_env = excluded.onvif_credentials_env,
+                    motion_min_area = excluded.motion_min_area,
+                    yolo_confidence = excluded.yolo_confidence,
+                    clip_after_motion = excluded.clip_after_motion,
+                    updated_at = excluded.updated_at,
+                    deleted_at = NULL",
             )
             .bind(&camera.id)
             .bind(&camera.name)
             .bind(&camera.rtsp_url_env)
+            .bind(&camera.rtsp_codec)
             .bind(&camera.onvif_url)
             .bind(&camera.onvif_credentials_env)
             .bind(camera.motion_min_area)
             .bind(camera.yolo_confidence)
+            .bind(camera.clip_after_motion)
             .bind(now)
             .bind(now)
             .execute(&mut *transaction)
@@ -97,7 +113,7 @@ impl Database {
     }
 
     pub async fn camera_count(&self) -> Result<i64, StorageError> {
-        sqlx::query_scalar("SELECT COUNT(*) FROM cameras WHERE deleted_at IS NULL")
+        sqlx::query_scalar("SELECT COUNT(*) FROM cameras WHERE deleted_at IS NULL AND enabled = 1")
             .fetch_one(&self.pool)
             .await
             .map_err(StorageError::Database)
@@ -105,8 +121,9 @@ impl Database {
 
     pub async fn get_camera(&self, id: &str) -> Result<Option<Camera>, StorageError> {
         let camera = query_as::<_, Camera>(
-            "SELECT id, name, enabled, rtsp_url_env, onvif_url, onvif_credentials_env,
-                    motion_min_area, yolo_confidence, created_at, updated_at, deleted_at
+            "SELECT id, name, enabled, rtsp_url_env, rtsp_codec, onvif_url,
+                    onvif_credentials_env, motion_min_area, yolo_confidence,
+                    clip_after_motion, created_at, updated_at, deleted_at
              FROM cameras WHERE id = ?",
         )
         .bind(id)

@@ -79,10 +79,10 @@ pub async fn bootstrap(config: Config) -> Result<AppState, ServerStartupError> {
         .await
         .map_err(ServerStartupError::Database)?;
 
-    if was_created {
+    if !cameras.is_empty() {
         let new_cameras = cameras.iter().map(new_camera).collect::<Vec<_>>();
         database
-            .seed_cameras(&new_cameras)
+            .upsert_cameras(&new_cameras)
             .await
             .map_err(ServerStartupError::Database)?;
     }
@@ -118,7 +118,18 @@ pub async fn bootstrap(config: Config) -> Result<AppState, ServerStartupError> {
 
     let status_model = Arc::new(CameraStatusModel::default());
     let camera_runtimes = Arc::new(DashMap::new());
-    for camera in cameras {
+    for camera in database
+        .list_cameras()
+        .await
+        .map_err(ServerStartupError::Database)?
+    {
+        let camera_id = camera.id.clone();
+        let camera = CameraConfig::from_storage(camera).map_err(|source| {
+            ServerStartupError::StoredCameraConfiguration {
+                camera_id: camera_id.clone(),
+                source,
+            }
+        })?;
         let camera_id = camera.id.as_str().to_owned();
         let recording = SegmentRecordingConfig::new(
             app.segment_directory.join(camera_id.as_str()),
@@ -164,6 +175,7 @@ fn new_camera(camera: &CameraConfig) -> NewCamera {
         id: camera.id.as_str().to_owned(),
         name: camera.name.clone(),
         rtsp_url_env: camera.rtsp_url_env.as_str().to_owned(),
+        rtsp_codec: camera.rtsp_codec.as_str().to_owned(),
         onvif_url: camera.onvif_url.as_ref().map(ToString::to_string),
         onvif_credentials_env: camera
             .onvif_credentials_env
@@ -171,5 +183,6 @@ fn new_camera(camera: &CameraConfig) -> NewCamera {
             .map(|environment_variable| environment_variable.as_str().to_owned()),
         motion_min_area: i64::from(camera.motion_min_area),
         yolo_confidence: f64::from(camera.yolo_confidence),
+        clip_after_motion: camera.clip_after_motion,
     }
 }

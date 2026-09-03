@@ -127,14 +127,16 @@ async fn queues_clip_with_pre_and_post_window() {
         .await
         .expect("database should open");
     database
-        .seed_cameras(&[NewCamera {
+        .upsert_cameras(&[NewCamera {
             id: "front-door".to_owned(),
             name: "Front door".to_owned(),
             rtsp_url_env: "CAMWATCH_FRONT_DOOR_RTSP_URL".to_owned(),
+            rtsp_codec: "h264".to_owned(),
             onvif_url: None,
             onvif_credentials_env: None,
             motion_min_area: 1000,
             yolo_confidence: 0.5,
+            clip_after_motion: true,
         }])
         .await
         .expect("camera should be seeded");

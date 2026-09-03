@@ -166,9 +166,7 @@ Server może korzystać bezpośrednio z publicznych typów `camwatch`, ale handl
 
 ### CRUD kamer przez panel
 
-CRUD kamer jest częścią docelowego panelu. TOML służy wyłącznie do pierwszego bootstrapu pustej bazy; po inicjalizacji SQLite jest źródłem prawdy dla kamer widocznych oraz edytowanych przez UI.
-
-Przed implementacją formularzy należy uzupełnić trwały model kamery o wszystkie pola potrzebne do odtworzenia runtime'u. Obecna tabela `cameras` nie zawiera przynajmniej `rtsp_codec` i `clip_after_motion`, więc nie wystarcza do pełnej edycji kamery z panelu.
+CRUD kamer jest częścią docelowego panelu. Przy każdym starcie wpisy kamer obecne w TOML są upsertowane do SQLite, a następnie SQLite jest źródłem prawdy dla kamer widocznych oraz edytowanych przez UI. Kamery nieobecne w TOML pozostają w bazie.
 
 `CameraInput` powinien obejmować:
 

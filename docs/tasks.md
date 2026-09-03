@@ -317,7 +317,7 @@ Szczegółowa architektura, decyzje bezpieczeństwa oraz kontrakty między crate
 
 **Kryteria akceptacji:**
 
-- TOML bootstrapuje tylko pustą bazę; po nim SQLite jest źródłem prawdy dla kamer.
+- TOML wykonuje przy starcie upsert kamer do SQLite; następnie runtime'y są odtwarzane ze wszystkich aktywnych rekordów bazy.
 - Formularze przyjmują wyłącznie referencje env dla RTSP i ONVIF, nigdy sekrety.
 - Nieprawidłowe dane renderują błędy walidacji jako pełna strona lub fragment htmx.
 - Dodanie, edycja i usunięcie zmieniają SQLite oraz rejestr kamer.

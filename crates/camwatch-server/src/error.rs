@@ -1,6 +1,6 @@
 use std::{fmt, net::SocketAddr};
 
-use camwatch::{bucket::R2Error, storage::StorageError};
+use camwatch::{bucket::R2Error, config::ConfigError, storage::StorageError};
 use thiserror::Error;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -26,4 +26,10 @@ pub enum ServerStartupError {
     Database(#[source] StorageError),
     #[error("R2 configuration error")]
     R2Configuration(#[source] R2Error),
+    #[error("invalid stored camera configuration for {camera_id}")]
+    StoredCameraConfiguration {
+        camera_id: String,
+        #[source]
+        source: ConfigError,
+    },
 }
