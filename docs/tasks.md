@@ -245,6 +245,8 @@ Szczegółowa architektura, decyzje bezpieczeństwa oraz kontrakty między crate
 
 ### WEB-03: Dodać modele odczytu i mapę runtime'ów kamer
 
+**Status:** Complete
+
 **Pokrywa:** FR-01, FR-02, FR-06, FR-10
 
 **Zakres:** dodać mapę aktualnych runtime'ów kamer dostępną przez `AppState` oraz osobne modele DTO `CameraSummary` i `CameraDetails`. Lista kamer jest pobierana z SQLite, a DTO łączy dane trwałe ze statusem RTSP, dostępnością PTZ i informacją, czy runtime działa. Nie tworzyć osobnego rejestru duplikującego dane z bazy.

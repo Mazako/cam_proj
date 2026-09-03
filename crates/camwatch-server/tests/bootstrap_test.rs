@@ -1,6 +1,8 @@
 use std::path::Path;
 
-use camwatch::config::Config;
+use std::time::SystemTime;
+
+use camwatch::{config::Config, stream::CameraStreamStatus};
 use camwatch_server::{app_state::bootstrap, error::ServerStartupError};
 
 #[tokio::test]
@@ -23,6 +25,49 @@ async fn bootstraps_directly_in_the_server_without_external_integrations() {
 
     assert!(!state.runtime_running("front-door"));
     assert!(!state.ptz_available("front-door"));
+
+    let summaries = state
+        .camera_summaries()
+        .await
+        .expect("camera summaries should load");
+    assert_eq!(summaries.len(), 1);
+    assert_eq!(summaries[0].id, "front-door");
+    assert_eq!(summaries[0].name, "Front door");
+    assert!(!summaries[0].runtime_running);
+    assert!(!summaries[0].ptz_available);
+
+    state.status_model.update(
+        "front-door",
+        CameraStreamStatus::Online {
+            since: SystemTime::UNIX_EPOCH,
+        },
+    );
+    assert_eq!(
+        state
+            .camera_summaries()
+            .await
+            .expect("camera summaries should load")[0]
+            .stream_status,
+        Some(CameraStreamStatus::Online {
+            since: SystemTime::UNIX_EPOCH,
+        })
+    );
+
+    let details = state
+        .camera_details("front-door")
+        .await
+        .expect("camera details should load")
+        .expect("camera details should exist");
+    assert_eq!(details.summary.id, "front-door");
+    assert_eq!(details.rtsp_codec, "h264");
+    assert!(details.clip_after_motion);
+    assert!(
+        state
+            .camera_details("missing")
+            .await
+            .expect("missing camera lookup should succeed")
+            .is_none()
+    );
 }
 
 #[tokio::test]

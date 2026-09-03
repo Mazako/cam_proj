@@ -5,12 +5,13 @@ use camwatch::{
     clips::{ClipManager, create_clip_uploader_worker, create_clip_worker, create_retainer_worker},
     config::{CameraConfig, Config},
     runtime::CameraRuntime,
-    storage::{Database, NewCamera},
+    storage::{Camera, Database, NewCamera, StorageError},
     stream::{CameraStatusModel, GstreamerCameraStream, SegmentRecordingConfig},
 };
 use dashmap::DashMap;
 use std::time::Duration;
 
+use crate::camera_dto::{CameraDetailsDto, CameraSummaryDto};
 use crate::error::ServerStartupError;
 use crate::runtime_task::RuntimeTask;
 
@@ -46,7 +47,42 @@ impl AppState {
     pub fn ptz_available(&self, camera_id: &str) -> bool {
         self.camera_runtimes
             .get(camera_id)
-            .is_some_and(|runtime| runtime.ptz_available)
+            .is_some_and(|runtime| runtime.is_running() && runtime.ptz_available)
+    }
+
+    pub async fn camera_summaries(&self) -> Result<Vec<CameraSummaryDto>, StorageError> {
+        Ok(self
+            .database
+            .list_cameras()
+            .await?
+            .iter()
+            .map(|camera| self.camera_summary(camera))
+            .collect())
+    }
+
+    pub async fn camera_details(
+        &self,
+        camera_id: &str,
+    ) -> Result<Option<CameraDetailsDto>, StorageError> {
+        let Some(camera) = self.database.get_camera(camera_id).await? else {
+            return Ok(None);
+        };
+        if !camera.enabled || camera.deleted_at.is_some() {
+            return Ok(None);
+        }
+
+        let summary = self.camera_summary(&camera);
+        Ok(Some(CameraDetailsDto {
+            summary,
+            enabled: camera.enabled,
+            rtsp_url_env: camera.rtsp_url_env,
+            rtsp_codec: camera.rtsp_codec,
+            onvif_url: camera.onvif_url,
+            onvif_credentials_env: camera.onvif_credentials_env,
+            motion_min_area: camera.motion_min_area,
+            yolo_confidence: camera.yolo_confidence,
+            clip_after_motion: camera.clip_after_motion,
+        }))
     }
 
     pub async fn stop_runtime(&self, camera_id: &str) {
@@ -65,6 +101,16 @@ impl AppState {
 
         for camera_id in camera_ids {
             self.stop_runtime(&camera_id).await;
+        }
+    }
+
+    fn camera_summary(&self, camera: &Camera) -> CameraSummaryDto {
+        CameraSummaryDto {
+            id: camera.id.clone(),
+            name: camera.name.clone(),
+            runtime_running: self.runtime_running(&camera.id),
+            stream_status: self.status_model.get(&camera.id),
+            ptz_available: self.ptz_available(&camera.id),
         }
     }
 }
