@@ -209,6 +209,8 @@ Szczegółowa architektura, decyzje bezpieczeństwa oraz kontrakty między crate
 
 ### WEB-01: Utworzyć crate `camwatch-server` i szkielet HTTP
 
+**Status:** Complete
+
 **Pokrywa:** NFR-01, NFR-04
 
 **Zakres:** dodać `crates/camwatch-server` do workspace'u, binarkę Axum, podstawowy `AppState`, router i kontrolowane uruchomienie serwera wyłącznie na loopbackie. Dodać `askama`, `askama_web`, `tower-http`, `tower-sessions` i pozostałe minimalne zależności serwera. `camwatch-server` importuje `camwatch`; `camwatch` nie może zależeć od HTTP ani HTML.
