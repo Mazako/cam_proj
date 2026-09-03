@@ -2,6 +2,30 @@
 
 Rust application for local network camera monitoring.
 
+## Architecture
+
+```mermaid
+flowchart LR
+    Camera["Camera: RTSP + ONVIF"] --> GStreamer["GStreamer"]
+    GStreamer --> Segments["Rotating MP4 segments"]
+    GStreamer --> Frames["Analysis frames"]
+    Frames --> Motion["OpenCV MOG2"]
+    Motion -->|"motion"| Yolo["ONNX Runtime: YOLO"]
+    Yolo --> Clips["Clip lifecycle"]
+    Segments --> Clips
+    Clips --> LocalMp4["Local event MP4"]
+    Clips --> Sqlite["SQLite metadata"]
+    LocalMp4 --> Uploader["clip_uploader: up to 3 attempts"]
+    Uploader --> R2["Cloudflare R2"]
+    GStreamer --> Hls["HLS"]
+    Hls --> Server["Axum SSR server"]
+    Browser["Local browser"] --> Server
+    Server --> Ptz["ONVIF PTZ"]
+    Ptz --> Camera
+```
+
+For the full architecture and MVP scope, see [the project guide](docs/README.md).
+
 ## Running
 
 ```sh
