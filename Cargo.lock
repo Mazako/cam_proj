@@ -1001,6 +1001,8 @@ dependencies = [
  "axum",
  "camwatch",
  "clap",
+ "tempfile",
+ "thiserror",
  "tokio",
  "tower",
  "tower-http",

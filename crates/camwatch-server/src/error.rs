@@ -1,5 +1,8 @@
 use std::{fmt, net::SocketAddr};
 
+use camwatch::{bucket::R2Error, storage::StorageError};
+use thiserror::Error;
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct NonLoopbackBindAddress(pub SocketAddr);
 
@@ -14,3 +17,13 @@ impl fmt::Display for NonLoopbackBindAddress {
 }
 
 impl std::error::Error for NonLoopbackBindAddress {}
+
+#[derive(Debug, Error)]
+pub enum ServerStartupError {
+    #[error("a new database requires at least one camera")]
+    EmptyInitialDatabase,
+    #[error("database error")]
+    Database(#[source] StorageError),
+    #[error("R2 configuration error")]
+    R2Configuration(#[source] R2Error),
+}

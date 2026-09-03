@@ -225,19 +225,21 @@ Szczegółowa architektura, decyzje bezpieczeństwa oraz kontrakty między crate
 
 **Zależności:** ARC-01.
 
-### WEB-02: Wydzielić `CamwatchService` i publiczny `CamwatchHandle`
+### WEB-02: Przenieść bootstrap do `camwatch-server`
+
+**Status:** Complete
 
 **Pokrywa:** NFR-01
 
-**Zakres:** przenieść bootstrap z obecnego `crates/camwatch/src/main.rs` do warstwy aplikacyjnej crate'a `camwatch`. Dodać publiczny `CamwatchService::start` oraz `CamwatchHandle`. Handle ma ukrywać SQLite, GStreamera, ONVIF i kanały workerów, ale pozwolić backendowi na listowanie kamer, odczyt szczegółów, wykonanie PTZ, CRUD kamer i kontrolowane zamknięcie.
+**Zakres:** przenieść bootstrap z obecnego `crates/camwatch/src/main.rs` bezpośrednio do `camwatch-server`. `camwatch` pozostaje biblioteką, a server może bezpośrednio korzystać z `Database`, runtime'ów, `ClipManager` i workerów. `AppState` przechowuje zasoby potrzebne handlerom.
 
 **Kryteria akceptacji:**
 
-- `camwatch-server` uruchamia runtime wyłącznie przez publiczny API `camwatch`.
-- Publiczny API nie ujawnia `Database`, typów GStreamera ani `OnvifConnection`.
+- `camwatch-server` uruchamia runtime bezpośrednio z typów biblioteki `camwatch`.
+- `camwatch` nie ma binarki ani zależności HTTP.
 - Błąd konfiguracji R2 przy włączonym R2 nadal kończy start kontrolowanym błędem.
-- Zamykanie handle'a kończy workery bez panic.
-- Testy publicznego API są w `crates/camwatch/tests/` i nie wymagają HTTP.
+- Start servera kończy się kontrolowanym błędem bez panic.
+- Testy bootstrapu są w `crates/camwatch-server/tests/` i nie wymagają HTTP.
 
 **Zależności:** WEB-01, ARC-02, ARC-03, VID-01, R2-02.
 
@@ -245,12 +247,12 @@ Szczegółowa architektura, decyzje bezpieczeństwa oraz kontrakty między crate
 
 **Pokrywa:** FR-01, FR-02, FR-06, FR-10
 
-**Zakres:** dodać rejestr kamer dostępny przez `CamwatchHandle` oraz osobne modele `CameraSummary`, `CameraDetails` i `CameraActivity`. Rejestr powstaje przy starcie, listuje kamery, agreguje status RTSP, wynik wykrycia PTZ i ulotny stan klipu/uploadu. Nie zapisuje historii eventów ani uploadów.
+**Zakres:** dodać rejestr kamer dostępny przez `AppState` oraz osobne modele `CameraSummary`, `CameraDetails` i `CameraActivity`. Rejestr powstaje przy starcie, listuje kamery, agreguje status RTSP, wynik wykrycia PTZ i ulotny stan klipu/uploadu. Nie zapisuje historii eventów ani uploadów.
 
 **Kryteria akceptacji:**
 
 - Lista kamer zawiera wszystkie aktywne kamery i nie ujawnia modeli storage.
-- Zmiana statusu RTSP jest widoczna przez handle.
+- Zmiana statusu RTSP jest widoczna przez `AppState`.
 - Kamera bez PTZ ma `ptz_available = false`.
 - Rejestr udostępnia wyłącznie bieżącą aktywność, bez historii.
 - Testy obejmują status online/offline, PTZ oraz stan aktywnego klipu.
@@ -304,7 +306,7 @@ Szczegółowa architektura, decyzje bezpieczeństwa oraz kontrakty między crate
 - Nieistniejąca kamera zwraca SSR 404.
 - Fragmenty htmx odświeżają status i aktywność bez przeładowania layoutu.
 - Ręczne odświeżenie strony daje ten sam, pełny widok.
-- Testy HTTP używają fałszywego handle'a lub kontrolowanego stanu bez prawdziwej kamery.
+- Testy HTTP używają kontrolowanego stanu bez prawdziwej kamery.
 
 **Zależności:** WEB-03, WEB-04, WEB-05.
 
@@ -330,7 +332,7 @@ Szczegółowa architektura, decyzje bezpieczeństwa oraz kontrakty między crate
 
 **Pokrywa:** FR-10
 
-**Zakres:** dodać cztery przyciski kierunkowe do szczegółów kamery. Każdy klik wykonuje jeden bezpieczny, krótki ruch przez `CamwatchHandle::move_ptz`; nie implementować przytrzymywania przycisku. Odpowiedź htmx odświeża komponent PTZ i komunikat błędu.
+**Zakres:** dodać cztery przyciski kierunkowe do szczegółów kamery. Każdy klik wykonuje jeden bezpieczny, krótki ruch przez zasoby PTZ dostępne w `AppState`; nie implementować przytrzymywania przycisku. Odpowiedź htmx odświeża komponent PTZ i komunikat błędu.
 
 **Kryteria akceptacji:**
 

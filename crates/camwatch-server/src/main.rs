@@ -7,7 +7,7 @@ use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
 
 use camwatch_server::{
-    app_state::AppState,
+    app_state::bootstrap,
     router::{router, validate_bind_address},
 };
 
@@ -45,12 +45,28 @@ async fn main() {
         }
     };
 
+    let state = match bootstrap(config).await {
+        Ok(state) => state,
+        Err(error) => {
+            eprintln!("Camwatch startup error: {error}");
+            std::process::exit(3);
+        }
+    };
+
     tracing::info!(%bind_address, "server started");
 
-    if let Err(error) = serve(listener, router(AppState::default())).await {
+    let result = serve(listener, router(state))
+        .with_graceful_shutdown(shutdown_signal())
+        .await;
+
+    if let Err(error) = result {
         eprintln!("Server error: {error}");
         std::process::exit(3);
     }
+}
+
+async fn shutdown_signal() {
+    let _ = tokio::signal::ctrl_c().await;
 }
 
 fn init_logging() {

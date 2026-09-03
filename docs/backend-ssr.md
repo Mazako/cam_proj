@@ -106,7 +106,7 @@ camwatch = { path = "../camwatch" }
 
 Crate biblioteczny. Nie może zależeć od Axum, Askama, HTML, ciasteczek, sesji ani szczegółów HTTP.
 
-Odpowiada za:
+Zawiera:
 
 - ładowanie i walidację konfiguracji runtime'u;
 - otwarcie SQLite i bootstrap kamer;
@@ -115,72 +115,28 @@ Odpowiada za:
 - składanie klipów;
 - worker R2 i retencję segmentów;
 - odczyt możliwości PTZ przy uruchamianiu kamery;
-- publiczny, bezpieczny dla backendu odczyt statusu kamery i wykonanie komendy PTZ;
-- kontrolowane zamknięcie workerów.
+- typy i funkcje infrastruktury używane przez backend;
+- modele storage oraz runtime kamer.
 
-Nie należy wystawiać backendowi `Database`, `GstreamerCameraStream`, `OnvifConnection`, `OnvifSession`, kanałów workerów ani prywatnych modeli storage.
+Crate pozostaje wolny od Axum, Askama, HTML, ciasteczek, sesji i szczegółów HTTP.
 
 ### `camwatch-server`
 
 Crate binarny. Odpowiada wyłącznie za HTTP i prezentację:
 
 - parsowanie CLI serwera i uruchomienie logowania;
-- uruchomienie `camwatch` oraz trzymanie zwróconego handle'a;
+- bezpośredni bootstrap zasobów `camwatch` i trzymanie ich w stanie aplikacji;
 - Axum router, middleware, uwierzytelnienie i sesje;
 - renderowanie pełnych stron oraz fragmentów HTML dla htmx;
 - serwowanie własnych statycznych assetów CSS/JS;
 - mapowanie błędów domenowych na odpowiedzi HTTP;
 - nieujawnianie sekretów i danych wewnętrznych runtime'u.
 
-## Refactor wymagany w `camwatch`
+## Bootstrap aplikacji
 
-Obecne `src/main.rs` wykonuje bootstrap, uruchamia workery i spawn'uje `CameraRuntime`. Tę logikę trzeba przenieść z binarki do publicznej warstwy aplikacyjnej, przykładowo `camwatch::application`.
+`camwatch` jest wyłącznie biblioteką. `camwatch-server` jest composition rootem procesu i bezpośrednio tworzy `Database`, workery, `ClipManager` oraz `CameraRuntime`. Stan tych zasobów trafia do `AppState`.
 
-Proponowane typy publiczne:
-
-```rust
-pub struct CamwatchService;
-pub struct CamwatchHandle;
-pub struct CameraSummary;
-pub struct CameraDetails;
-pub struct CameraActivity;
-pub enum PtzDirection;
-pub enum CamwatchApplicationError;
-```
-
-Nazwy mogą zostać lekko poprawione podczas implementacji, ale granica odpowiedzialności ma pozostać taka sama.
-
-Proponowany kontrakt:
-
-```rust
-impl CamwatchService {
-    pub async fn start(config: Config) -> Result<CamwatchHandle, CamwatchApplicationError>;
-}
-
-impl CamwatchHandle {
-    pub fn list_cameras(&self) -> Vec<CameraSummary>;
-    pub fn camera(&self, id: &CameraId) -> Option<CameraDetails>;
-    pub async fn create_camera(
-        &self,
-        input: CameraInput,
-    ) -> Result<CameraDetails, CamwatchApplicationError>;
-    pub async fn update_camera(
-        &self,
-        id: &CameraId,
-        input: CameraInput,
-    ) -> Result<CameraDetails, CamwatchApplicationError>;
-    pub async fn delete_camera(
-        &self,
-        id: &CameraId,
-    ) -> Result<(), CamwatchApplicationError>;
-    pub async fn move_ptz(
-        &self,
-        id: &CameraId,
-        direction: PtzDirection,
-    ) -> Result<(), CamwatchApplicationError>;
-    pub async fn shutdown(self) -> Result<(), CamwatchApplicationError>;
-}
-```
+Nie dodajemy osobnej warstwy `CamwatchService` ani `CamwatchHandle`. Backend może korzystać z publicznych typów crate'a `camwatch`, a logika prezentacji pozostaje w handlerach i modelach widoku.
 
 `CameraSummary` i `CameraDetails` są modelami odczytu dla UI. Nie mogą być bezpośrednimi modelami SQLx ani GStreamera.
 
@@ -195,7 +151,7 @@ Minimalne dane widoczne z backendu:
 
 ### Rejestr kamer
 
-Należy dodać in-memory rejestr kamer dostępny przez `CamwatchHandle`.
+Należy dodać in-memory rejestr kamer dostępny przez `AppState`.
 
 Powód: obecny `CameraStatusModel` umie odczytać status po ID, ale nie potrafi listować kamer, a `OnvifConnection` jest własnością `CameraRuntime`. Backend potrzebuje jednego, stabilnego wejścia do listy kamer, ich statusu oraz PTZ.
 
@@ -208,7 +164,7 @@ Rejestr powinien:
 - serializować komendy PTZ dla jednej kamery;
 - nie utrwalać historii eventów ani uploadów.
 
-Backend ma wywoływać wyłącznie `CamwatchHandle::move_ptz`, nigdy `OnvifConnection` bezpośrednio.
+Server może korzystać bezpośrednio z publicznych typów `camwatch`, ale handler nie powinien wykonywać przypadkowych operacji infrastrukturalnych. Operacje PTZ i CRUD mają być skupione w modułach backendu.
 
 ### CRUD kamer przez panel
 
@@ -229,7 +185,7 @@ Przed implementacją formularzy należy uzupełnić trwały model kamery o wszys
 
 Formularz nie przyjmuje sekretów RTSP ani ONVIF. Przyjmuje wyłącznie nazwy zmiennych środowiskowych, które są walidowane tak samo jak konfiguracja TOML.
 
-Po utworzeniu, edycji lub usunięciu kamery `CamwatchHandle` ma wykonać tę operację w SQLite oraz od razu zsynchronizować runtime bez restartu całej aplikacji:
+Po utworzeniu, edycji lub usunięciu kamery server ma wykonać tę operację w SQLite oraz od razu zsynchronizować runtime bez restartu całej aplikacji:
 
 1. zwalidować wejście;
 2. zapisać zmianę w bazie;
@@ -270,12 +226,14 @@ Stan Axum powinien być mały i klonowalny:
 
 ```rust
 pub struct AppState {
-    pub camwatch: Arc<CamwatchHandle>,
+    pub database: Arc<Database>,
+    pub clip_manager: Arc<ClipManager>,
+    pub status_model: Arc<CameraStatusModel>,
     pub auth: Arc<AuthService>,
 }
 ```
 
-`AppState` nie zawiera haseł w postaci możliwej do zalogowania ani `Database`.
+`AppState` nie zawiera haseł w postaci możliwej do zalogowania. Zawiera bezpośrednio zasoby `camwatch`, ponieważ server jest composition rootem.
 
 ### Routing
 
@@ -416,7 +374,7 @@ src/views/
 └── ptz_controls_view.rs
 ```
 
-Szablon nie może wykonywać logiki domenowej. Handler pobiera dane z `CamwatchHandle`, buduje prosty model widoku, a Askama tylko go renderuje.
+Szablon nie może wykonywać logiki domenowej. Handler pobiera dane z `AppState`, buduje prosty model widoku, a Askama tylko go renderuje.
 
 ## Logowanie i sesje
 
@@ -530,7 +488,7 @@ CSS i `hls.js` należy trzymać lokalnie w `crates/camwatch-server/static/`, bez
 
 ### `camwatch`
 
-- `CamwatchService::start` buduje publiczny handle bez Axum.
+- bootstrap servera buduje stan bez zależności HTTP w crate'cie `camwatch`;
 - Rejestr kamer poprawnie listuje kamery i ich statusy.
 - Utworzenie, edycja i soft-delete kamery synchronizują SQLite oraz rejestr runtime'u.
 - Edycja jednej kamery nie zatrzymuje pozostałych runtime'ów.
@@ -548,7 +506,7 @@ CSS i `hls.js` należy trzymać lokalnie w `crates/camwatch-server/static/`, bez
 - sesja wygasa po godzinie bezczynności;
 - logout unieważnia sesję;
 - formularze POST odrzucają niepoprawny token CSRF;
-- lista kamer renderuje HTML z danymi testowego handle'a;
+- lista kamer renderuje HTML z danymi testowego stanu aplikacji;
 - formularze dodania i edycji kamery renderują błędy walidacji bez utraty danych jawnych;
 - nieistniejąca kamera zwraca SSR 404;
 - PTZ dla kamery bez PTZ jest odrzucone;
@@ -561,7 +519,7 @@ Testy HTTP powinny działać bez GStreamera, kamery, ONVIF, R2 ani prawdziwej ba
 ## Kolejność implementacji
 
 1. Dodać `camwatch-server` do workspace'u z pustym `GET /health`.
-2. Wydzielić bootstrap obecnego `crates/camwatch/src/main.rs` do `CamwatchService::start` i `CamwatchHandle`.
+2. Przenieść bootstrap obecnego `crates/camwatch/src/main.rs` bezpośrednio do `camwatch-server` i umieścić zasoby w `AppState`.
 3. Dodać in-memory rejestr kamer i odczytowe modele UI w crate'ie `camwatch`.
 4. Dodać Axum router, `AppState`, obsługę błędów i bazowy layout Askama.
 5. Dodać logowanie, sesje, middleware autoryzacji, CSRF oraz logout.

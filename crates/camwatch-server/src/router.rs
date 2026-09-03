@@ -17,10 +17,20 @@ pub fn validate_bind_address(address: SocketAddr) -> Result<(), NonLoopbackBindA
 }
 
 pub fn router(state: AppState) -> Router {
+    routes::<AppState>().with_state(state)
+}
+
+pub fn health_router() -> Router {
+    routes::<()>()
+}
+
+fn routes<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
     Router::new()
         .route("/health", get(health))
         .layer(TraceLayer::new_for_http())
-        .with_state(state)
 }
 
 async fn health() -> (StatusCode, &'static str) {

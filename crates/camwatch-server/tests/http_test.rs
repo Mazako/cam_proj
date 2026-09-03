@@ -4,15 +4,12 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use camwatch_server::{
-    app_state::AppState,
-    router::{router, validate_bind_address},
-};
+use camwatch_server::router::{health_router, validate_bind_address};
 use tower::ServiceExt;
 
 #[tokio::test]
 async fn health_endpoint_does_not_start_camera_integrations() {
-    let response = router(AppState::default())
+    let response = health_router()
         .oneshot(
             Request::builder()
                 .uri("/health")
