@@ -1,0 +1,12 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}403 — Access denied{% endblock %}
+
+{% block content %}
+<section class="error-page" aria-labelledby="page-title">
+    <p class="error-code">403</p>
+    <h1 id="page-title">Access denied</h1>
+    <p>You do not have permission to view this resource.</p>
+    <a class="button" href="/">Back to home</a>
+</section>
+{% endblock %}

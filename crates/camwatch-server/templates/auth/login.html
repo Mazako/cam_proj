@@ -1,0 +1,20 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Log in — Camwatch{% endblock %}
+
+{% block content %}
+<section class="auth-page" aria-labelledby="page-title">
+    <h1 id="page-title">Log in</h1>
+    {% if show_error %}
+    <p class="form-error" role="alert">Invalid login or password.</p>
+    {% endif %}
+    <form action="/login" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label for="login">Login</label>
+        <input id="login" name="login" type="text" autocomplete="username" required>
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button type="submit">Log in</button>
+    </form>
+</section>
+{% endblock %}

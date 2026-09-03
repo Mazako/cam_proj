@@ -1,0 +1,89 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, sans-serif;
+  color: #172033;
+  background: #f4f6fb;
+}
+
+body {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 0 1.5rem 4rem;
+}
+
+.site-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 1.5rem 0;
+  border-bottom: 1px solid #d9deea;
+}
+
+nav,
+.actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+a {
+  color: #2858c7;
+}
+.brand {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: none;
+}
+.hero,
+.error-page {
+  max-width: 42rem;
+  padding: 6rem 0;
+}
+.auth-page {
+  max-width: 24rem;
+  padding: 4rem 0;
+}
+.auth-page form {
+  display: grid;
+  gap: 0.6rem;
+}
+.auth-page input {
+  border: 1px solid #b9c2d5;
+  border-radius: 0.4rem;
+  padding: 0.7rem;
+  font: inherit;
+}
+.form-error {
+  color: #a12626;
+  font-weight: 600;
+}
+.eyebrow,
+.error-code {
+  color: #2858c7;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.error-code {
+  font-size: 3rem;
+  margin-bottom: 0;
+}
+.button,
+button {
+  display: inline-block;
+  border: 0;
+  border-radius: 0.5rem;
+  padding: 0.7rem 1rem;
+  background: #2858c7;
+  color: white;
+  text-decoration: none;
+  font: inherit;
+  cursor: pointer;
+}
+.button.secondary {
+  background: #dfe6f8;
+  color: #172033;
+}
+.refresh-form {
+  margin-top: 2rem;
+}

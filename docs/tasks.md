@@ -260,16 +260,17 @@ Szczegółowa architektura, decyzje bezpieczeństwa oraz kontrakty między crate
 
 **Zależności:** WEB-02, EVT-01, ONV-01.
 
-### WEB-04: Bazowy SSR Askama i full htmx
+### WEB-04: Bazowy SSR Askama
+
+**Status:** Complete
 
 **Pokrywa:** FR-08, FR-09
 
-**Zakres:** przygotować layout Askama, lokalne assety, strony błędów, renderowanie pełnej strony oraz fragmentów HTML. Dodać htmx lokalnie i skonfigurować `hx-boost`, `hx-push-url` i fallback do zwykłych linków/formularzy. Nie tworzyć JSON API dla panelu.
+**Zakres:** przygotować layout Askama, lokalne assety, strony błędów i renderowanie pełnych stron HTML. Przygotować lokalny asset htmx do użycia przy właściwych fragmentach kamer w WEB-06, ale nie dodawać sztucznego fragmentu home ani globalnego przechwytywania linków/formularzy. Nie tworzyć JSON API dla panelu.
 
 **Kryteria akceptacji:**
 
 - `GET` renderuje kompletną stronę HTML przez Askama.
-- Żądanie z `HX-Request` dostaje wyłącznie wymagany fragment HTML.
 - Linki i formularze pozostają użyteczne po wyłączeniu JavaScriptu.
 - Są osobne szablony dla layoutu, błędu 403, 404 i 500.
 - Każdy model widoku jest osobnym typem w osobnym pliku.
@@ -277,6 +278,8 @@ Szczegółowa architektura, decyzje bezpieczeństwa oraz kontrakty między crate
 **Zależności:** WEB-01, WEB-03.
 
 ### WEB-05: Logowanie i sesja lokalnego administratora
+
+**Status:** Complete
 
 **Pokrywa:** FR-08, NFR-03, NFR-04
 

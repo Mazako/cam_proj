@@ -12,6 +12,9 @@ axum.workspace = true
 camwatch = { path = "../camwatch" }
 clap.workspace = true
 dashmap.workspace = true
+serde.workspace = true
+subtle.workspace = true
+time.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 tower-http.workspace = true
@@ -19,6 +22,7 @@ tower-sessions.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 thiserror.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

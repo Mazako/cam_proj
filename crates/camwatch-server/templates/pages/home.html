@@ -1,0 +1,22 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Camwatch — dashboard{% endblock %}
+
+{% block content %}
+<section class="hero" aria-labelledby="page-title">
+    <p class="eyebrow">Local dashboard</p>
+    <h1 id="page-title">Camwatch</h1>
+    <p>The camera monitoring server is ready to run.</p>
+    <div class="actions">
+        <a class="button" href="/cameras">Open cameras</a>
+        <a class="button secondary" href="/login">Log in</a>
+    </div>
+    <form class="refresh-form" action="/" method="get">
+        <button type="submit">Refresh page</button>
+    </form>
+    <form class="refresh-form" action="/logout" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit">Log out</button>
+    </form>
+</section>
+{% endblock %}

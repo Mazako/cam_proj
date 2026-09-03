@@ -1,6 +1,8 @@
 use std::{fmt, net::SocketAddr};
 
 use camwatch::{bucket::R2Error, config::ConfigError, storage::StorageError};
+
+use crate::auth::AuthConfigError;
 use thiserror::Error;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -20,6 +22,8 @@ impl std::error::Error for NonLoopbackBindAddress {}
 
 #[derive(Debug, Error)]
 pub enum ServerStartupError {
+    #[error("authentication configuration error")]
+    AuthenticationConfiguration(#[source] AuthConfigError),
     #[error("a new database requires at least one camera")]
     EmptyInitialDatabase,
     #[error("database error")]

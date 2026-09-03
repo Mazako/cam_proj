@@ -1,0 +1,12 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}500 — Server error{% endblock %}
+
+{% block content %}
+<section class="error-page" aria-labelledby="page-title">
+    <p class="error-code">500</p>
+    <h1 id="page-title">Server error</h1>
+    <p>We could not handle the request. Please try again later.</p>
+    <a class="button" href="/">Back to home</a>
+</section>
+{% endblock %}

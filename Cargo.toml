@@ -21,14 +21,16 @@ gstreamer-app = "0.24"
 gstreamer-pbutils = "0.24"
 opencv = { version = "0.100", default-features = false, features = ["imgcodecs", "imgproc", "video"] }
 serde = { version = "1.0", features = ["derive"] }
+subtle = "2.6"
 sqlx = { version = "0.8", default-features = false, features = ["macros", "migrate", "runtime-tokio", "sqlite"] }
 thiserror = "2.0"
 tempfile = "3.15"
+time = "0.3"
 tokio = { version = "1.44", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-util = "0.7"
 toml = "0.8"
 tower = "0.5"
-tower-http = { version = "0.6", features = ["trace"] }
+tower-http = { version = "0.6", features = ["fs", "trace"] }
 tower-sessions = "0.15"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }

@@ -11,12 +11,14 @@ use camwatch::{
 use dashmap::DashMap;
 use std::time::Duration;
 
+use crate::auth::AuthService;
 use crate::camera_dto::{CameraDetailsDto, CameraSummaryDto};
 use crate::error::ServerStartupError;
 use crate::runtime_task::RuntimeTask;
 
 #[derive(Clone)]
 pub struct AppState {
+    pub auth: Arc<AuthService>,
     pub database: Arc<Database>,
     pub clip_manager: Arc<ClipManager>,
     pub status_model: Arc<CameraStatusModel>,
@@ -25,12 +27,14 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(
+        auth: Arc<AuthService>,
         database: Arc<Database>,
         clip_manager: Arc<ClipManager>,
         status_model: Arc<CameraStatusModel>,
         camera_runtimes: Arc<DashMap<String, RuntimeTask>>,
     ) -> Self {
         Self {
+            auth,
             database,
             clip_manager,
             status_model,
@@ -117,6 +121,9 @@ impl AppState {
 
 pub async fn bootstrap(config: Config) -> Result<AppState, ServerStartupError> {
     let Config { app, cameras } = config;
+    let auth = Arc::new(
+        AuthService::from_environment().map_err(ServerStartupError::AuthenticationConfiguration)?,
+    );
     if !app.database_path.exists() && cameras.is_empty() {
         return Err(ServerStartupError::EmptyInitialDatabase);
     }
@@ -209,6 +216,7 @@ pub async fn bootstrap(config: Config) -> Result<AppState, ServerStartupError> {
     }
 
     Ok(AppState::new(
+        auth,
         database,
         clip_manager,
         status_model,
