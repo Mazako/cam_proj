@@ -56,7 +56,7 @@ Panel używa `htmx` do dynamicznych interakcji, ale pozostaje aplikacją SSR:
 - nie ma osobnej aplikacji frontendowej, bundlera ani stanu klienta;
 - formularze i linki powinny mieć zwykły wariant HTTP jako fallback, gdy JavaScript jest wyłączony.
 
-htmx obsługuje odświeżanie kart kamer, statusu i aktywności klipu, wysyłanie formularzy oraz przyciski PTZ. [Dokumentacja htmx](https://htmx.org/docs/)
+htmx obsługuje odświeżanie kart kamer i statusu, wysyłanie formularzy oraz przyciski PTZ. [Dokumentacja htmx](https://htmx.org/docs/)
 
 ## Docelowy układ workspace
 
@@ -145,24 +145,22 @@ Minimalne dane widoczne z backendu:
 - `id` i nazwa kamery;
 - status `online` lub `offline` oraz czas ostatniej zmiany;
 - flaga `ptz_available`;
-- informacja, czy trwa składanie klipu;
-- informacja, czy upload jest aktualnie wykonywany oraz wynik ostatniej próby w bieżącym życiu procesu;
 - ścieżka lub identyfikator playlisty HLS, gdy VID-04 będzie gotowe.
 
-### Rejestr kamer
+### Mapa runtime'ów kamer
 
-Należy dodać in-memory rejestr kamer dostępny przez `AppState`.
+SQLite pozostaje źródłem prawdy dla listy i konfiguracji kamer. `AppState` przechowuje wyłącznie mapę aktualnie uruchomionych runtime'ów, indeksowaną identyfikatorem kamery.
 
-Powód: obecny `CameraStatusModel` umie odczytać status po ID, ale nie potrafi listować kamer, a `OnvifConnection` jest własnością `CameraRuntime`. Backend potrzebuje jednego, stabilnego wejścia do listy kamer, ich statusu oraz PTZ.
+Wpis runtime'u powinien:
 
-Rejestr powinien:
+- posiadać `CancellationToken` do graceful shutdownu;
+- posiadać `JoinHandle` do oczekiwania na zakończenie taska;
+- przechowywać wynik wykrycia PTZ z momentu startu;
+- pozwalać stwierdzić, czy task nadal działa.
 
-- zostać utworzony z konfiguracji kamer przy starcie;
-- przechowywać metadane kamery i współdzielony stan runtime'u;
-- aktualizować statusy po zdarzeniach RTSP;
-- zapamiętać wynik wykrycia PTZ z momentu startu;
-- serializować komendy PTZ dla jednej kamery;
-- nie utrwalać historii eventów ani uploadów.
+Po usunięciu lub przeładowaniu kamery server anuluje jej runtime i czeka na zakończenie taska przed uruchomieniem nowego. Przy zamknięciu procesu wszystkie runtime'y są zatrzymywane tą samą ścieżką.
+
+Modele odczytu dla UI powstają na żądanie przez połączenie danych z SQLite, statusu z `CameraStatusModel` oraz informacji z mapy runtime'ów. Nie tworzymy osobnego rejestru duplikującego dane kamer.
 
 Server może korzystać bezpośrednio z publicznych typów `camwatch`, ale handler nie powinien wykonywać przypadkowych operacji infrastrukturalnych. Operacje PTZ i CRUD mają być skupione w modułach backendu.
 
@@ -266,7 +264,6 @@ Endpointy fragmentów htmx:
 | --- | --- | --- |
 | GET | `/fragments/cameras` | Karty kamer bez pełnego layoutu |
 | GET | `/fragments/cameras/:camera_id/status` | Status pojedynczej kamery |
-| GET | `/fragments/cameras/:camera_id/activity` | Bieżący stan klipu/uploadu |
 
 Handler PTZ oraz formularze edycji kamery rozpoznają nagłówek `HX-Request`: dla htmx zwracają zaktualizowany fragment HTML, a dla zwykłego formularza wykonują redirect po POST.
 
@@ -296,7 +293,6 @@ Każda karta kamery zawiera:
 - status online/offline;
 - czas ostatniej zmiany statusu;
 - oznaczenie PTZ, jeżeli jest dostępne;
-- informację „trwa składanie klipu” lub „trwa upload”, jeśli dotyczy;
 - link do szczegółów.
 
 Na stronie można dodać lekki ogólny status procesu: liczba kamer online/offline oraz status R2 w bieżącym procesie. Nie tworzyć tabeli historii zdarzeń.
@@ -310,8 +306,7 @@ Elementy:
 - obszar live preview HLS, gdy VID-04 będzie gotowe;
 - komunikat o niedostępnym strumieniu;
 - panel PTZ z czterema przyciskami tylko dla kamer z `ptz_available = true`;
-- bieżący, ulotny stan klipu i uploadu;
-- czytelny komunikat po błędzie PTZ lub uploadu.
+- czytelny komunikat po błędzie PTZ.
 
 Nie wyświetlać historii eventów, archiwum klipów ani listy dawnych uploadów.
 

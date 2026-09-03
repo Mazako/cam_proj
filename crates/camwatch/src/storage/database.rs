@@ -55,6 +55,19 @@ pub(crate) fn unix_time_millis(time: SystemTime) -> Option<i64> {
 }
 
 impl Database {
+    pub async fn list_cameras(&self) -> Result<Vec<Camera>, StorageError> {
+        query_as::<_, Camera>(
+            "SELECT id, name, enabled, rtsp_url_env, onvif_url, onvif_credentials_env,
+                    motion_min_area, yolo_confidence, created_at, updated_at, deleted_at
+             FROM cameras
+             WHERE deleted_at IS NULL
+             ORDER BY name, id",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(StorageError::Database)
+    }
+
     pub async fn seed_cameras(&self, cameras: &[NewCamera]) -> Result<(), StorageError> {
         let now = unix_time_millis(SystemTime::now()).unwrap_or_default();
         let mut transaction = self.pool.begin().await.map_err(StorageError::Database)?;

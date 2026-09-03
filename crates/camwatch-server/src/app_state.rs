@@ -8,15 +8,18 @@ use camwatch::{
     storage::{Database, NewCamera},
     stream::{CameraStatusModel, GstreamerCameraStream, SegmentRecordingConfig},
 };
+use dashmap::DashMap;
 use std::time::Duration;
 
 use crate::error::ServerStartupError;
+use crate::runtime_task::RuntimeTask;
 
 #[derive(Clone)]
 pub struct AppState {
     pub database: Arc<Database>,
     pub clip_manager: Arc<ClipManager>,
     pub status_model: Arc<CameraStatusModel>,
+    pub camera_runtimes: Arc<DashMap<String, RuntimeTask>>,
 }
 
 impl AppState {
@@ -24,11 +27,44 @@ impl AppState {
         database: Arc<Database>,
         clip_manager: Arc<ClipManager>,
         status_model: Arc<CameraStatusModel>,
+        camera_runtimes: Arc<DashMap<String, RuntimeTask>>,
     ) -> Self {
         Self {
             database,
             clip_manager,
             status_model,
+            camera_runtimes,
+        }
+    }
+
+    pub fn runtime_running(&self, camera_id: &str) -> bool {
+        self.camera_runtimes
+            .get(camera_id)
+            .is_some_and(|runtime| runtime.is_running())
+    }
+
+    pub fn ptz_available(&self, camera_id: &str) -> bool {
+        self.camera_runtimes
+            .get(camera_id)
+            .is_some_and(|runtime| runtime.ptz_available)
+    }
+
+    pub async fn stop_runtime(&self, camera_id: &str) {
+        let runtime = self.camera_runtimes.remove(camera_id);
+        if let Some(runtime) = runtime {
+            runtime.1.stop().await;
+        }
+    }
+
+    pub async fn stop_all_runtimes(&self) {
+        let camera_ids = self
+            .camera_runtimes
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect::<Vec<_>>();
+
+        for camera_id in camera_ids {
+            self.stop_runtime(&camera_id).await;
         }
     }
 }
@@ -81,9 +117,11 @@ pub async fn bootstrap(config: Config) -> Result<AppState, ServerStartupError> {
     );
 
     let status_model = Arc::new(CameraStatusModel::default());
+    let camera_runtimes = Arc::new(DashMap::new());
     for camera in cameras {
+        let camera_id = camera.id.as_str().to_owned();
         let recording = SegmentRecordingConfig::new(
-            app.segment_directory.join(camera.id.as_str()),
+            app.segment_directory.join(camera_id.as_str()),
             Duration::from_secs(u64::from(app.segment_rotation_seconds)),
         );
         match GstreamerCameraStream::from_environment(
@@ -101,7 +139,8 @@ pub async fn bootstrap(config: Config) -> Result<AppState, ServerStartupError> {
                     Arc::clone(&clip_manager),
                 )
                 .await;
-                tokio::spawn(runtime.run());
+                let runtime_task = RuntimeTask::spawn(runtime);
+                camera_runtimes.insert(camera_id, runtime_task);
             }
             Err(_) => {
                 tracing::warn!(
@@ -112,7 +151,12 @@ pub async fn bootstrap(config: Config) -> Result<AppState, ServerStartupError> {
         }
     }
 
-    Ok(AppState::new(database, clip_manager, status_model))
+    Ok(AppState::new(
+        database,
+        clip_manager,
+        status_model,
+        camera_runtimes,
+    ))
 }
 
 fn new_camera(camera: &CameraConfig) -> NewCamera {

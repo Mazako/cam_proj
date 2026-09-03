@@ -12,6 +12,7 @@ use camwatch::{
     stream::CameraStatusModel,
 };
 use tempfile::tempdir;
+use tokio_util::sync::CancellationToken;
 
 use super::support::{
     RtspSession, assemble_pets2006_mp4, camera_stream, database_with_camera, is_playable_mp4,
@@ -95,7 +96,8 @@ async fn records_assembles_and_uploads_a_clip_to_r2() {
         clip_manager,
     )
     .await;
-    let runtime_task = tokio::spawn(runtime.run());
+    let cancel = CancellationToken::new();
+    let runtime_task = tokio::spawn(runtime.run(cancel.clone()));
 
     let uploaded_key = tokio::time::timeout(Duration::from_secs(90), async {
         loop {
@@ -108,7 +110,11 @@ async fn records_assembles_and_uploads_a_clip_to_r2() {
     })
     .await
     .expect("the full pipeline should upload a clip before timeout");
-    runtime_task.abort();
+    cancel.cancel();
+    tokio::time::timeout(Duration::from_secs(1), runtime_task)
+        .await
+        .expect("runtime should stop after cancellation")
+        .expect("runtime task should not panic");
 
     let downloaded = verification_client
         .get_object()

@@ -243,19 +243,18 @@ Szczegółowa architektura, decyzje bezpieczeństwa oraz kontrakty między crate
 
 **Zależności:** WEB-01, ARC-02, ARC-03, VID-01, R2-02.
 
-### WEB-03: Dodać in-memory rejestr kamer i modele odczytu
+### WEB-03: Dodać modele odczytu i mapę runtime'ów kamer
 
 **Pokrywa:** FR-01, FR-02, FR-06, FR-10
 
-**Zakres:** dodać rejestr kamer dostępny przez `AppState` oraz osobne modele `CameraSummary`, `CameraDetails` i `CameraActivity`. Rejestr powstaje przy starcie, listuje kamery, agreguje status RTSP, wynik wykrycia PTZ i ulotny stan klipu/uploadu. Nie zapisuje historii eventów ani uploadów.
+**Zakres:** dodać mapę aktualnych runtime'ów kamer dostępną przez `AppState` oraz osobne modele DTO `CameraSummary` i `CameraDetails`. Lista kamer jest pobierana z SQLite, a DTO łączy dane trwałe ze statusem RTSP, dostępnością PTZ i informacją, czy runtime działa. Nie tworzyć osobnego rejestru duplikującego dane z bazy.
 
 **Kryteria akceptacji:**
 
-- Lista kamer zawiera wszystkie aktywne kamery i nie ujawnia modeli storage.
-- Zmiana statusu RTSP jest widoczna przez `AppState`.
-- Kamera bez PTZ ma `ptz_available = false`.
-- Rejestr udostępnia wyłącznie bieżącą aktywność, bez historii.
-- Testy obejmują status online/offline, PTZ oraz stan aktywnego klipu.
+- Lista DTO powstaje na podstawie aktywnych kamer z SQLite i nie ujawnia modeli storage.
+- DTO zawiera status RTSP, `ptz_available` oraz `runtime_running`.
+- Usunięcie runtime'u z mapy zatrzymuje go graceful i nie zostawia taska w tle.
+- Testy obejmują status online/offline, PTZ i zatrzymanie runtime'u.
 
 **Zależności:** WEB-02, EVT-01, ONV-01.
 
@@ -297,14 +296,14 @@ Szczegółowa architektura, decyzje bezpieczeństwa oraz kontrakty między crate
 
 **Pokrywa:** FR-02, FR-06, FR-09
 
-**Zakres:** zaimplementować `GET /cameras`, `GET /cameras/:camera_id` i ich fragmenty htmx. Lista pokazuje karty kamer, status RTSP, dostępność PTZ i bieżącą aktywność. Szczegóły pokazują status, placeholder live preview HLS, PTZ i stan klipu/uploadu. Nie dodawać historii zdarzeń.
+**Zakres:** zaimplementować `GET /cameras`, `GET /cameras/:camera_id` i ich fragmenty htmx. Lista pokazuje karty kamer, status RTSP i dostępność PTZ. Szczegóły pokazują status, placeholder live preview HLS oraz PTZ. Nie dodawać historii zdarzeń ani stanu klipu/uploadu.
 
 **Kryteria akceptacji:**
 
 - Zalogowany użytkownik widzi wszystkie kamery i ich aktualne statusy.
 - Szczegóły istniejącej kamery renderują poprawny model widoku.
 - Nieistniejąca kamera zwraca SSR 404.
-- Fragmenty htmx odświeżają status i aktywność bez przeładowania layoutu.
+- Fragmenty htmx odświeżają status bez przeładowania layoutu.
 - Ręczne odświeżenie strony daje ten sam, pełny widok.
 - Testy HTTP używają kontrolowanego stanu bez prawdziwej kamery.
 

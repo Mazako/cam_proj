@@ -16,10 +16,13 @@ use camwatch::{
     },
 };
 use tempfile::tempdir;
+use tokio_util::sync::CancellationToken;
 
 struct FakeCameraStream {
     events: VecDeque<Result<CameraStreamEvent, CameraStreamError>>,
 }
+
+struct BlockingCameraStream;
 
 impl CameraStream for FakeCameraStream {
     fn next_event(
@@ -31,6 +34,46 @@ impl CameraStream for FakeCameraStream {
             .unwrap_or(Err(CameraStreamError::Unavailable));
         Box::pin(async move { event })
     }
+}
+
+impl CameraStream for BlockingCameraStream {
+    fn next_event(
+        &mut self,
+    ) -> CameraStreamFuture<'_, Result<CameraStreamEvent, CameraStreamError>> {
+        Box::pin(std::future::pending())
+    }
+}
+
+#[tokio::test]
+async fn stops_gracefully_when_cancelled_while_waiting_for_stream() {
+    let directory = tempdir().expect("temporary directory should exist");
+    let (database, _) = Database::open(&directory.path().join("camwatch.sqlite3"))
+        .await
+        .expect("database should open");
+    let app_config = app_config();
+    let (clip_sender, _clip_receiver) = tokio::sync::mpsc::unbounded_channel();
+    let clip_manager = Arc::new(ClipManager::new(
+        database.clone(),
+        clip_sender,
+        app_config.clips_directory.clone(),
+    ));
+    let runtime = CameraRuntime::new(
+        camera_config(),
+        &app_config,
+        BlockingCameraStream,
+        Arc::new(CameraStatusModel::default()),
+        database,
+        clip_manager,
+    )
+    .await;
+    let cancel = CancellationToken::new();
+    let task = tokio::spawn(runtime.run(cancel.clone()));
+
+    cancel.cancel();
+    tokio::time::timeout(Duration::from_secs(1), task)
+        .await
+        .expect("runtime should stop after cancellation")
+        .expect("runtime task should not panic");
 }
 
 #[tokio::test]
@@ -67,7 +110,7 @@ async fn updates_status_from_the_camera_stream() {
     .await;
     assert_eq!(runtime.pre_event_seconds, 10);
     assert_eq!(runtime.post_event_seconds, 20);
-    runtime.run().await;
+    runtime.run(CancellationToken::new()).await;
 
     assert_eq!(
         status_model.get("front-door"),
@@ -151,7 +194,7 @@ async fn queues_clip_with_pre_and_post_window() {
         Arc::clone(&clip_manager),
     )
     .await;
-    runtime.run().await;
+    runtime.run(CancellationToken::new()).await;
 
     let clip = clip_receiver
         .recv()

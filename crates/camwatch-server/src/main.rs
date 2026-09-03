@@ -55,9 +55,11 @@ async fn main() {
 
     tracing::info!(%bind_address, "server started");
 
-    let result = serve(listener, router(state))
+    let result = serve(listener, router(state.clone()))
         .with_graceful_shutdown(shutdown_signal())
         .await;
+
+    state.stop_all_runtimes().await;
 
     if let Err(error) = result {
         eprintln!("Server error: {error}");

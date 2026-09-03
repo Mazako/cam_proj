@@ -20,6 +20,9 @@ async fn bootstraps_directly_in_the_server_without_external_integrations() {
         1
     );
     assert!(database_path.exists());
+
+    assert!(!state.runtime_running("front-door"));
+    assert!(!state.ptz_available("front-door"));
 }
 
 #[tokio::test]

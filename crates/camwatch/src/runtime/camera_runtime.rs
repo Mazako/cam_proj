@@ -1,4 +1,10 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    path::PathBuf,
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
+
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     clips::{ClipManager, store_segment},
@@ -59,82 +65,105 @@ where
         self.onvif.is_some()
     }
 
-    pub async fn run(mut self) {
+    pub async fn run(mut self, cancel: CancellationToken) {
         loop {
-            match self.stream.next_event().await {
-                Ok(CameraStreamEvent::Status(status)) => {
-                    self.status_model
-                        .update(self.camera_config.id.as_str(), status);
-                    match status {
-                        CameraStreamStatus::Online { .. } => {
-                            tracing::info!(
-                                camera_id = self.camera_config.id.as_str(),
-                                "camera stream is online"
-                            );
-                        }
-                        CameraStreamStatus::Offline { .. } => {
-                            tracing::warn!(
-                                camera_id = self.camera_config.id.as_str(),
-                                "camera stream is offline"
-                            );
-                        }
-                    }
-                }
-                Ok(CameraStreamEvent::Frame(frame)) => match self
-                    .clip_manager
-                    .is_camera_recording(self.camera_config.id.as_str())
-                {
-                    true => {}
-                    false => {
-                        let clip_triggered = if self.camera_config.clip_after_motion {
-                            self.is_motion_detected(&frame)
-                        } else {
-                            self.is_motion_detected(&frame) && self.is_yolo_motion_detected(&frame)
-                        };
-                        if clip_triggered
-                            && let Err(error) = self
-                                .clip_manager
-                                .add_clip(
-                                    self.camera_config.id.as_str().to_owned(),
-                                    frame.captured_at,
-                                    Duration::from_secs(self.pre_event_seconds),
-                                    Duration::from_secs(self.post_event_seconds),
-                                )
-                                .await
-                        {
-                            tracing::warn!(camera_id = self.camera_config.id.as_str(), %error, "clip could not be started");
-                        }
-                    }
-                },
-                Ok(CameraStreamEvent::SegmentFinalized {
-                    path,
-                    started_at,
-                    ended_at,
-                }) => {
-                    match store_segment(
-                        &self.database,
-                        self.camera_config.id.as_str(),
-                        path,
-                        started_at,
-                        ended_at,
-                    )
-                    .await
-                    {
-                        Err(err) => {
-                            tracing::warn!(camera_id = self.camera_config.id.as_str(), %err, "segment could not be stored");
-                        }
-                        Ok(segment) => {
-                            self.clip_manager.put_segment_and_try_save_clip(segment);
-                        }
-                    }
-                }
-                Err(_) => {
-                    tracing::warn!(
+            tokio::select! {
+                _ = cancel.cancelled() => {
+                    tracing::info!(
                         camera_id = self.camera_config.id.as_str(),
-                        "camera stream stopped"
+                        "camera runtime stopped gracefully"
                     );
                     return;
                 }
+                event = self.stream.next_event() => match event {
+                    Ok(CameraStreamEvent::Status(status)) => self.handle_status_event(status),
+                    Ok(CameraStreamEvent::Frame(frame)) => self.handle_frame_event(frame).await,
+                    Ok(CameraStreamEvent::SegmentFinalized {
+                        path,
+                        started_at,
+                        ended_at,
+                    }) => self
+                        .handle_segment_finalized_event(path, started_at, ended_at)
+                        .await,
+                    Err(_) => {
+                        tracing::warn!(
+                            camera_id = self.camera_config.id.as_str(),
+                            "camera stream stopped"
+                        );
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    fn handle_status_event(&self, status: CameraStreamStatus) {
+        self.status_model
+            .update(self.camera_config.id.as_str(), status);
+        match status {
+            CameraStreamStatus::Online { .. } => {
+                tracing::info!(
+                    camera_id = self.camera_config.id.as_str(),
+                    "camera stream is online"
+                );
+            }
+            CameraStreamStatus::Offline { .. } => {
+                tracing::warn!(
+                    camera_id = self.camera_config.id.as_str(),
+                    "camera stream is offline"
+                );
+            }
+        }
+    }
+
+    async fn handle_frame_event(&mut self, frame: Frame) {
+        if self
+            .clip_manager
+            .is_camera_recording(self.camera_config.id.as_str())
+        {
+            return;
+        }
+
+        let clip_triggered = if self.camera_config.clip_after_motion {
+            self.is_motion_detected(&frame)
+        } else {
+            self.is_motion_detected(&frame) && self.is_yolo_motion_detected(&frame)
+        };
+        if clip_triggered
+            && let Err(error) = self
+                .clip_manager
+                .add_clip(
+                    self.camera_config.id.as_str().to_owned(),
+                    frame.captured_at,
+                    Duration::from_secs(self.pre_event_seconds),
+                    Duration::from_secs(self.post_event_seconds),
+                )
+                .await
+        {
+            tracing::warn!(camera_id = self.camera_config.id.as_str(), %error, "clip could not be started");
+        }
+    }
+
+    async fn handle_segment_finalized_event(
+        &mut self,
+        path: PathBuf,
+        started_at: SystemTime,
+        ended_at: SystemTime,
+    ) {
+        match store_segment(
+            &self.database,
+            self.camera_config.id.as_str(),
+            path,
+            started_at,
+            ended_at,
+        )
+        .await
+        {
+            Err(error) => {
+                tracing::warn!(camera_id = self.camera_config.id.as_str(), %error, "segment could not be stored");
+            }
+            Ok(segment) => {
+                self.clip_manager.put_segment_and_try_save_clip(segment);
             }
         }
     }

@@ -7,6 +7,7 @@ use camwatch::{
     stream::CameraStatusModel,
 };
 use tempfile::tempdir;
+use tokio_util::sync::CancellationToken;
 
 use super::support::{
     RtspSession, assemble_pets2006_mp4, camera_stream, database_with_camera, pets2006_dataset,
@@ -53,13 +54,18 @@ async fn run_runtime_until_clip(clip_after_motion: bool) -> ClipJob {
         clip_manager,
     )
     .await;
-    let runtime_task = tokio::spawn(runtime.run());
+    let cancel = CancellationToken::new();
+    let runtime_task = tokio::spawn(runtime.run(cancel.clone()));
 
     let event = tokio::time::timeout(Duration::from_secs(60), clip_receiver.recv())
         .await
         .expect("runtime should queue a clip before timeout")
         .expect("clip sender should remain connected");
-    runtime_task.abort();
+    cancel.cancel();
+    tokio::time::timeout(Duration::from_secs(1), runtime_task)
+        .await
+        .expect("runtime should stop after cancellation")
+        .expect("runtime task should not panic");
     event
 }
 
