@@ -1,0 +1,44 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Camwatch — cameras{% endblock %}
+
+{% block content %}
+<section class="page-heading" aria-labelledby="page-title">
+    <p class="eyebrow">Monitoring</p>
+    <h1 id="page-title">Cameras</h1>
+    <p>Current status of configured cameras.</p>
+</section>
+
+{% if has_cameras %}
+<section class="camera-grid" aria-label="Configured cameras">
+    {% for camera in cameras %}
+    <article class="camera-card">
+        <div class="camera-card-heading">
+            <div>
+                <p class="eyebrow">Camera</p>
+                <h2>{{ camera.name }}</h2>
+            </div>
+            <span class="status status-{{ camera.stream_status|lower }}">{{ camera.stream_status }}</span>
+        </div>
+        <dl class="camera-status-list">
+            <div>
+                <dt>Runtime</dt>
+                <dd>{{ camera.runtime_status }}</dd>
+            </div>
+            <div>
+                <dt>PTZ</dt>
+                <dd>{{ camera.ptz_status }}</dd>
+            </div>
+        </dl>
+        <a class="button" href="/cameras/{{ camera.id }}">View details</a>
+    </article>
+    {% endfor %}
+</section>
+{% else %}
+<section class="empty-state">
+    <h2>No cameras configured</h2>
+    <p>There are no active cameras in the database.</p>
+</section>
+{% endif %}
+
+{% endblock %}

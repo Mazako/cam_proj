@@ -7,6 +7,7 @@ use tower_http::{services::ServeDir, trace::TraceLayer};
 use crate::{
     app_state::AppState,
     auth_routes::{self, login, login_page, logout, protected_home, require_auth},
+    camera_routes,
     error::NonLoopbackBindAddress,
     views,
 };
@@ -54,7 +55,8 @@ fn public_routes() -> Router<AppState> {
 fn protected_routes() -> Router<AppState> {
     Router::new()
         .route("/", get(protected_home))
-        .route("/cameras", get(protected_home))
+        .route("/cameras", get(camera_routes::list))
+        .route("/cameras/{camera_id}", get(camera_routes::details))
         .route("/logout", axum::routing::post(logout))
         .layer(middleware::from_fn(require_auth))
 }

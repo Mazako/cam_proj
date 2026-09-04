@@ -9,11 +9,19 @@
 <body>
     <header class="site-header">
         <a class="brand" href="/">Camwatch</a>
-        <nav aria-label="Main navigation">
-            <a href="/">Home</a>
-            <a href="/cameras">Cameras</a>
-            <a href="/login">Log in</a>
-        </nav>
+        <div class="header-actions">
+            <nav aria-label="Main navigation">
+                <a href="/">Home</a>
+                <a href="/cameras">Cameras</a>
+                <a href="/login">Log in</a>
+            </nav>
+            {% if show_logout %}
+            <form action="/logout" method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button class="button secondary" type="submit">Log out</button>
+            </form>
+            {% endif %}
+        </div>
     </header>
     <main id="main-content">
         {% block content %}{% endblock %}

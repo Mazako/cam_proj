@@ -1,0 +1,43 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Camwatch — {{ camera.name }}{% endblock %}
+
+{% block content %}
+<section class="page-heading" aria-labelledby="page-title">
+    <p class="eyebrow">Camera details</p>
+    <h1 id="page-title">{{ camera.name }}</h1>
+    <p>Camera identifier: <code>{{ camera.id }}</code></p>
+</section>
+
+<section class="camera-detail-layout">
+    <article class="preview-placeholder" aria-labelledby="preview-title">
+        <p class="eyebrow">Live preview</p>
+        <h2 id="preview-title">Preview is not available yet</h2>
+        <p>The HLS pipeline will be connected in the video streaming task.</p>
+    </article>
+
+    <article class="camera-card" aria-labelledby="status-title">
+        <p class="eyebrow">Current state</p>
+        <h2 id="status-title">Status</h2>
+        <dl class="camera-status-list">
+            <div>
+                <dt>Stream</dt>
+                <dd>{{ camera.stream_status }}</dd>
+            </div>
+            <div>
+                <dt>Runtime</dt>
+                <dd>{{ camera.runtime_status }}</dd>
+            </div>
+            <div>
+                <dt>PTZ</dt>
+                <dd>{{ camera.ptz_status }}</dd>
+            </div>
+        </dl>
+        <p class="muted">PTZ controls will be added in the next panel task.</p>
+    </article>
+</section>
+
+<div class="actions">
+    <a class="button secondary" href="/cameras">Back to cameras</a>
+</div>
+{% endblock %}

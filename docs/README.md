@@ -10,6 +10,7 @@ Pierwsza wersja jest przeznaczona dla jednej do czterech kamer Tapo w tej samej 
 
 - [Backlog spec-driven](tasks.md) — kolejność implementacji, zależności i kryteria akceptacji.
 - [Specyfikacja backendu SSR](backend-ssr.md) — podział crate'ów, SSR, widoki i logowanie.
+- [Lokalna fake camera](fake-camera.md) — MediaMTX i testowy stream FFmpeg do ręcznego uruchamiania Camwatch.
 
 ## Zakres MVP
 

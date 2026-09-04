@@ -5,6 +5,7 @@ use askama::Template;
 pub struct LoginView {
     pub csrf_token: String,
     pub show_error: bool,
+    pub show_logout: bool,
 }
 
 impl LoginView {
@@ -12,6 +13,7 @@ impl LoginView {
         Self {
             csrf_token,
             show_error,
+            show_logout: false,
         }
     }
 }

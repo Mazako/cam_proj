@@ -1,0 +1,41 @@
+services:
+  mediamtx:
+    image: bluenviron/mediamtx:1
+    environment:
+      MTX_RTSPTRANSPORTS: tcp
+    ports:
+      - "8554:8554"
+    restart: unless-stopped
+
+  fake-camera:
+    image: jrottenberg/ffmpeg:8-ubuntu
+    depends_on:
+      - mediamtx
+    command:
+      - -hide_banner
+      - -loglevel
+      - warning
+      - -re
+      - -f
+      - lavfi
+      - -i
+      - testsrc2=size=640x360:rate=10
+      - -an
+      - -c:v
+      - libx264
+      - -pix_fmt
+      - yuv420p
+      - -preset
+      - ultrafast
+      - -tune
+      - zerolatency
+      - -g
+      - "10"
+      - -keyint_min
+      - "10"
+      - -f
+      - rtsp
+      - -rtsp_transport
+      - tcp
+      - rtsp://mediamtx:8554/fake-camera
+    restart: unless-stopped

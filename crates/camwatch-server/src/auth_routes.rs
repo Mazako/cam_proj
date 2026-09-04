@@ -125,7 +125,9 @@ pub(crate) async fn protected_home(session: Session) -> Response {
     views::home_page_response(csrf_token)
 }
 
-async fn csrf_token(session: &Session) -> Result<String, tower_sessions::session::Error> {
+pub(crate) async fn csrf_token(
+    session: &Session,
+) -> Result<String, tower_sessions::session::Error> {
     if let Some(token) = session.get::<String>(CSRF_TOKEN_KEY).await? {
         return Ok(token);
     }

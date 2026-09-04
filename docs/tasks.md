@@ -301,14 +301,15 @@ Szczegółowa architektura, decyzje bezpieczeństwa oraz kontrakty między crate
 
 **Pokrywa:** FR-02, FR-06, FR-09
 
-**Zakres:** zaimplementować `GET /cameras`, `GET /cameras/:camera_id` i ich fragmenty htmx. Lista pokazuje karty kamer, status RTSP i dostępność PTZ. Szczegóły pokazują status, placeholder live preview HLS oraz PTZ. Nie dodawać historii zdarzeń ani stanu klipu/uploadu.
+**Status:** Complete
+
+**Zakres:** zaimplementować `GET /cameras`, `GET /cameras/:camera_id` jako pełne strony SSR. Lista pokazuje karty kamer, status RTSP i dostępność PTZ. Szczegóły pokazują status, placeholder live preview HLS oraz PTZ. Nie dodawać historii zdarzeń ani stanu klipu/uploadu. Interakcje htmx pozostają poza zakresem tego zadania.
 
 **Kryteria akceptacji:**
 
 - Zalogowany użytkownik widzi wszystkie kamery i ich aktualne statusy.
 - Szczegóły istniejącej kamery renderują poprawny model widoku.
 - Nieistniejąca kamera zwraca SSR 404.
-- Fragmenty htmx odświeżają status bez przeładowania layoutu.
 - Ręczne odświeżenie strony daje ten sam, pełny widok.
 - Testy HTTP używają kontrolowanego stanu bez prawdziwej kamery.
 
