@@ -39,5 +39,10 @@
 
 <div class="actions">
     <a class="button secondary" href="/cameras">Back to cameras</a>
+    <a class="button" href="/cameras/{{ camera.id }}/edit">Edit camera</a>
+    <form action="/cameras/{{ camera.id }}/delete" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="danger" type="submit">Delete camera</button>
+    </form>
 </div>
 {% endblock %}

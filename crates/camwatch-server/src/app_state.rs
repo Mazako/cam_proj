@@ -3,7 +3,7 @@ use std::sync::Arc;
 use camwatch::{
     bucket::{BucketUploader, NoOpBucketUploader, R2Client},
     clips::{ClipManager, create_clip_uploader_worker, create_clip_worker, create_retainer_worker},
-    config::{CameraConfig, Config},
+    config::{AppConfig, CameraConfig, Config},
     runtime::CameraRuntime,
     storage::{Camera, Database, NewCamera, StorageError},
     stream::{CameraStatusModel, GstreamerCameraStream, SegmentRecordingConfig},
@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use crate::auth::AuthService;
 use crate::camera_dto::{CameraDetailsDto, CameraSummaryDto};
-use crate::error::ServerStartupError;
+use crate::error::{RuntimeReloadError, ServerStartupError};
 use crate::runtime_task::RuntimeTask;
 
 #[derive(Clone)]
@@ -23,6 +23,7 @@ pub struct AppState {
     pub clip_manager: Arc<ClipManager>,
     pub status_model: Arc<CameraStatusModel>,
     pub camera_runtimes: Arc<DashMap<String, RuntimeTask>>,
+    pub runtime_config: Arc<AppConfig>,
 }
 
 impl AppState {
@@ -32,6 +33,7 @@ impl AppState {
         clip_manager: Arc<ClipManager>,
         status_model: Arc<CameraStatusModel>,
         camera_runtimes: Arc<DashMap<String, RuntimeTask>>,
+        runtime_config: Arc<AppConfig>,
     ) -> Self {
         Self {
             auth,
@@ -39,6 +41,7 @@ impl AppState {
             clip_manager,
             status_model,
             camera_runtimes,
+            runtime_config,
         }
     }
 
@@ -106,6 +109,38 @@ impl AppState {
         for camera_id in camera_ids {
             self.stop_runtime(&camera_id).await;
         }
+    }
+
+    pub async fn replace_camera_runtime(&self, camera: Camera) -> Result<(), RuntimeReloadError> {
+        let camera_id = camera.id.clone();
+        let camera = CameraConfig::from_storage(camera)
+            .map_err(|errors| RuntimeReloadError::InvalidConfiguration(errors.into()))?;
+        let recording = SegmentRecordingConfig::new(
+            self.runtime_config
+                .segment_directory
+                .join(camera_id.as_str()),
+            Duration::from_secs(u64::from(self.runtime_config.segment_rotation_seconds)),
+        );
+        let stream = GstreamerCameraStream::from_environment(
+            camera.rtsp_url_env.as_str(),
+            camera.rtsp_codec,
+            recording,
+        )
+        .map_err(|_| RuntimeReloadError::StreamUnavailable)?;
+        let runtime = CameraRuntime::new(
+            camera,
+            &self.runtime_config,
+            stream,
+            Arc::clone(&self.status_model),
+            self.database.as_ref().clone(),
+            Arc::clone(&self.clip_manager),
+        )
+        .await;
+
+        self.stop_runtime(&camera_id).await;
+        self.camera_runtimes
+            .insert(camera_id, RuntimeTask::spawn(runtime));
+        Ok(())
     }
 
     fn camera_summary(&self, camera: &Camera) -> CameraSummaryDto {
@@ -180,7 +215,7 @@ pub async fn bootstrap(config: Config) -> Result<AppState, ServerStartupError> {
         let camera = CameraConfig::from_storage(camera).map_err(|source| {
             ServerStartupError::StoredCameraConfiguration {
                 camera_id: camera_id.clone(),
-                source,
+                source: source.into(),
             }
         })?;
         let camera_id = camera.id.as_str().to_owned();
@@ -221,6 +256,7 @@ pub async fn bootstrap(config: Config) -> Result<AppState, ServerStartupError> {
         clip_manager,
         status_model,
         camera_runtimes,
+        Arc::new(app),
     ))
 }
 

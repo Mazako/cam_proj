@@ -112,6 +112,10 @@ impl Database {
         transaction.commit().await.map_err(StorageError::Database)
     }
 
+    pub async fn upsert_camera(&self, camera: &NewCamera) -> Result<(), StorageError> {
+        self.upsert_cameras(std::slice::from_ref(camera)).await
+    }
+
     pub async fn camera_count(&self) -> Result<i64, StorageError> {
         sqlx::query_scalar("SELECT COUNT(*) FROM cameras WHERE deleted_at IS NULL AND enabled = 1")
             .fetch_one(&self.pool)
@@ -132,6 +136,23 @@ impl Database {
         .map_err(StorageError::Database)?;
 
         Ok(camera)
+    }
+
+    pub async fn soft_delete_camera(&self, id: &str) -> Result<bool, StorageError> {
+        let now = unix_time_millis(SystemTime::now()).unwrap_or_default();
+        let result = sqlx::query(
+            "UPDATE cameras
+             SET enabled = 0, deleted_at = ?, updated_at = ?
+             WHERE id = ? AND deleted_at IS NULL AND enabled = 1",
+        )
+        .bind(now)
+        .bind(now)
+        .bind(id)
+        .execute(&self.pool)
+        .await
+        .map_err(StorageError::Database)?;
+
+        Ok(result.rows_affected() == 1)
     }
 
     pub async fn upsert_segment(&self, segment: NewSegment) -> Result<Segment, StorageError> {

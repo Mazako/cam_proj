@@ -122,6 +122,58 @@ a {
 .actions form {
   margin: 0;
 }
+.camera-form {
+  display: grid;
+  gap: 1rem;
+  max-width: 42rem;
+}
+.camera-form fieldset {
+  display: grid;
+  gap: 0.6rem;
+  border: 1px solid #d9deea;
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  background: white;
+}
+.camera-form input,
+.camera-form select {
+  border: 1px solid #b9c2d5;
+  border-radius: 0.4rem;
+  padding: 0.7rem;
+  font: inherit;
+}
+.camera-form input[readonly] {
+  background: #edf0f6;
+}
+.camera-form legend {
+  padding: 0 0.35rem;
+  font-weight: 700;
+}
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.checkbox-label input {
+  width: 1rem;
+  height: 1rem;
+}
+.form-error-panel {
+  max-width: 42rem;
+  margin-bottom: 1rem;
+  border: 1px solid #e2aaaa;
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  background: #fff4f4;
+  color: #8d2424;
+}
+.form-error-panel h2 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+.danger {
+  background: #a12626;
+}
 @media (max-width: 48rem) {
   .camera-detail-layout {
     grid-template-columns: 1fr;

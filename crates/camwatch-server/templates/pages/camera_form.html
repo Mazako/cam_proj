@@ -1,0 +1,73 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Camwatch — {{ title }}{% endblock %}
+
+{% block content %}
+<section class="page-heading" aria-labelledby="page-title">
+    <p class="eyebrow">Camera configuration</p>
+    <h1 id="page-title">{{ title }}</h1>
+</section>
+
+{% if has_errors %}
+<section class="form-error-panel" role="alert" aria-labelledby="form-errors-title">
+    <h2 id="form-errors-title">Please correct the following errors</h2>
+    <ul>
+        {% for error in errors %}
+        <li>{{ error }}</li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+<form class="camera-form" action="{{ action }}" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <fieldset>
+        <legend>Identity</legend>
+        <label for="camera-id">Camera ID</label>
+        <input id="camera-id" name="id" type="text" value="{{ camera.id }}" pattern="[a-z0-9-]+" required {% if is_edit %}readonly{% endif %}>
+
+        <label for="camera-name">Name</label>
+        <input id="camera-name" name="name" type="text" value="{{ camera.name }}" required>
+    </fieldset>
+
+    <fieldset>
+        <legend>RTSP</legend>
+        <label for="rtsp-url-env">RTSP URL environment variable</label>
+        <input id="rtsp-url-env" name="rtsp_url_env" type="text" value="{{ camera.rtsp_url_env }}" pattern="[A-Z_][A-Z0-9_]*" required>
+
+        <label for="rtsp-codec">RTSP codec</label>
+        <select id="rtsp-codec" name="rtsp_codec">
+            <option value="h264" {% if camera.rtsp_codec == "h264" %}selected{% endif %}>H.264</option>
+            <option value="h265" {% if camera.rtsp_codec == "h265" %}selected{% endif %}>H.265</option>
+        </select>
+    </fieldset>
+
+    <fieldset>
+        <legend>ONVIF</legend>
+        <label for="onvif-url">ONVIF URL</label>
+        <input id="onvif-url" name="onvif_url" type="url" value="{{ camera.onvif_url }}" placeholder="https://camera.local/onvif/device_service">
+
+        <label for="onvif-credentials-env">ONVIF credentials environment variable</label>
+        <input id="onvif-credentials-env" name="onvif_credentials_env" type="text" value="{{ camera.onvif_credentials_env }}" pattern="[A-Z_][A-Z0-9_]*">
+    </fieldset>
+
+    <fieldset>
+        <legend>Detection and clips</legend>
+        <label for="motion-min-area">Motion minimum area</label>
+        <input id="motion-min-area" name="motion_min_area" type="number" min="1" step="1" value="{{ camera.motion_min_area }}" required>
+
+        <label for="yolo-confidence">YOLO confidence</label>
+        <input id="yolo-confidence" name="yolo_confidence" type="number" min="0" max="1" step="0.01" value="{{ camera.yolo_confidence }}" required>
+
+        <label class="checkbox-label" for="clip-after-motion">
+            <input id="clip-after-motion" name="clip_after_motion" type="checkbox" value="on" {% if camera.clip_after_motion %}checked{% endif %}>
+            Save a clip after motion
+        </label>
+    </fieldset>
+
+    <div class="actions">
+        <button type="submit">{{ submit_label }}</button>
+        <a class="button secondary" href="/cameras">Cancel</a>
+    </div>
+</form>
+{% endblock %}

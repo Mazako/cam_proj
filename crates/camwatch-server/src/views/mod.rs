@@ -1,4 +1,5 @@
 mod camera_details_view;
+mod camera_form_view;
 mod camera_list_view;
 mod error_403_view;
 mod error_404_view;
@@ -13,6 +14,7 @@ use axum::{
 };
 
 pub use camera_details_view::CameraDetailsView;
+pub use camera_form_view::CameraFormView;
 pub use camera_list_view::CameraListView;
 pub use error_403_view::Error403View;
 pub use error_404_view::Error404View;
@@ -42,6 +44,10 @@ pub fn camera_details_page_response(
     CameraDetailsView::new(csrf_token, camera)
         .into_web_template()
         .into_response()
+}
+
+pub fn camera_form_response(status: StatusCode, view: CameraFormView) -> Response {
+    (status, view.into_web_template()).into_response()
 }
 
 pub fn not_found_response() -> Response {

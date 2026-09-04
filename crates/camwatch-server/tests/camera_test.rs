@@ -68,6 +68,148 @@ async fn missing_camera_renders_ssr_not_found_page() {
     assert!(response_body(response).await.contains("Page not found"));
 }
 
+#[tokio::test]
+async fn camera_can_be_created_and_saved_when_runtime_is_unavailable() {
+    let context = test_context().await;
+    let state = context.state.clone();
+    let app = router_with_session_expiry(context.state, Duration::hours(1));
+    let cookie = login_with_default_credentials(&app).await;
+    let new_page = app
+        .clone()
+        .oneshot(cookie_request("/cameras/new", &cookie))
+        .await
+        .expect("new camera page request should complete");
+    let token = csrf_token(&response_body(new_page).await);
+
+    let response = app
+        .oneshot(form_request(
+            "/cameras/new",
+            &cookie,
+            &format!(
+                "csrf_token={token}&id=back-yard&name=Back%20yard&rtsp_url_env=CAMWATCH_BACK_YARD_RTSP_URL&rtsp_codec=h264&motion_min_area=1000&yolo_confidence=0.5&clip_after_motion=on"
+            ),
+        ))
+        .await
+        .expect("camera creation request should complete");
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(response.headers()[header::LOCATION], "/cameras/back-yard");
+    let camera = state
+        .database
+        .get_camera("back-yard")
+        .await
+        .expect("created camera should load")
+        .expect("created camera should exist");
+    assert_eq!(camera.name, "Back yard");
+    assert!(!state.runtime_running("back-yard"));
+}
+
+#[tokio::test]
+async fn camera_can_be_edited_without_reloading_other_runtime_state() {
+    let context = test_context().await;
+    let state = context.state.clone();
+    let app = router_with_session_expiry(context.state, Duration::hours(1));
+    let cookie = login_with_default_credentials(&app).await;
+    let edit_page = app
+        .clone()
+        .oneshot(cookie_request("/cameras/front-door/edit", &cookie))
+        .await
+        .expect("camera edit page request should complete");
+    let token = csrf_token(&response_body(edit_page).await);
+
+    let response = app
+        .oneshot(form_request(
+            "/cameras/front-door/edit",
+            &cookie,
+            &format!(
+                "csrf_token={token}&id=front-door&name=Updated%20front%20door&rtsp_url_env=CAMWATCH_FRONT_DOOR_RTSP_URL&rtsp_codec=h265&motion_min_area=2000&yolo_confidence=0.7"
+            ),
+        ))
+        .await
+        .expect("camera update request should complete");
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let camera = state
+        .database
+        .get_camera("front-door")
+        .await
+        .expect("updated camera should load")
+        .expect("updated camera should exist");
+    assert_eq!(camera.name, "Updated front door");
+    assert_eq!(camera.rtsp_codec, "h265");
+    assert_eq!(camera.motion_min_area, 2000);
+    assert!((camera.yolo_confidence - 0.7).abs() < f64::from(f32::EPSILON));
+    assert!(!camera.clip_after_motion);
+}
+
+#[tokio::test]
+async fn invalid_camera_input_renders_errors_without_saving() {
+    let context = test_context().await;
+    let state = context.state.clone();
+    let app = router_with_session_expiry(context.state, Duration::hours(1));
+    let cookie = login_with_default_credentials(&app).await;
+    let new_page = app
+        .clone()
+        .oneshot(cookie_request("/cameras/new", &cookie))
+        .await
+        .expect("new camera page request should complete");
+    let token = csrf_token(&response_body(new_page).await);
+
+    let response = app
+        .oneshot(form_request(
+            "/cameras/new",
+            &cookie,
+            &format!(
+                "csrf_token={token}&id=Bad%20ID&name=&rtsp_url_env=rtsp://secret&rtsp_codec=h264&motion_min_area=0&yolo_confidence=2"
+            ),
+        ))
+        .await
+        .expect("invalid camera request should complete");
+
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body = response_body(response).await;
+    assert!(body.contains("camera ID may contain only lowercase letters"));
+    assert!(body.contains("camera name cannot be empty"));
+    assert!(body.contains("rtsp_url_env must be an environment variable name"));
+    assert_eq!(state.database.camera_count().await.unwrap(), 1);
+}
+
+#[tokio::test]
+async fn camera_delete_soft_deletes_record_and_stops_runtime() {
+    let context = test_context().await;
+    let state = context.state.clone();
+    let app = router_with_session_expiry(context.state, Duration::hours(1));
+    let cookie = login_with_default_credentials(&app).await;
+    let details_page = app
+        .clone()
+        .oneshot(cookie_request("/cameras/front-door", &cookie))
+        .await
+        .expect("camera details request should complete");
+    let token = csrf_token(&response_body(details_page).await);
+
+    let response = app
+        .oneshot(form_request(
+            "/cameras/front-door/delete",
+            &cookie,
+            &format!("csrf_token={token}"),
+        ))
+        .await
+        .expect("camera delete request should complete");
+
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(response.headers()[header::LOCATION], "/cameras");
+    let camera = state
+        .database
+        .get_camera("front-door")
+        .await
+        .expect("deleted camera should load")
+        .expect("deleted camera record should be retained");
+    assert!(!camera.enabled);
+    assert!(camera.deleted_at.is_some());
+    assert!(state.camera_summaries().await.unwrap().is_empty());
+    assert!(state.camera_details("front-door").await.unwrap().is_none());
+}
+
 struct TestContext {
     _directory: tempfile::TempDir,
     state: camwatch_server::app_state::AppState,
@@ -147,6 +289,16 @@ fn cookie_request(uri: &str, cookie: &str) -> Request<Body> {
         .header(header::COOKIE, cookie)
         .body(Body::empty())
         .expect("cookie request should be valid")
+}
+
+fn form_request(uri: &str, cookie: &str, form: &str) -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header(header::COOKIE, cookie)
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(Body::from(form.to_owned()))
+        .expect("form request should be valid")
 }
 
 fn session_cookie(response: &axum::response::Response) -> String {

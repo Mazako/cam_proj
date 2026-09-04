@@ -101,6 +101,21 @@ fn rejects_incomplete_onvif_configuration() {
 }
 
 #[test]
+fn rejects_onvif_url_with_credentials() {
+    let input = VALID_CONFIG.replace(
+        "http://192.168.1.65:2020/onvif/device_service",
+        "http://user:password@192.168.1.65:2020/onvif/device_service",
+    );
+
+    let error = Config::parse(&input).expect_err("ONVIF URL must not contain credentials");
+
+    assert_eq!(
+        error.to_string(),
+        "invalid configuration: onvif_url must not contain credentials"
+    );
+}
+
+#[test]
 fn rejects_a_segment_rotation_longer_than_the_rolling_buffer() {
     let input = VALID_CONFIG.replace(
         "rolling_buffer_seconds = 30",
@@ -153,8 +168,9 @@ fn rejects_enabled_r2_without_required_environment_references() {
 
     let error = Config::parse(&input).expect_err("enabled R2 should require references");
 
-    assert_eq!(
-        error.to_string(),
-        "invalid configuration: r2_endpoint_env is required when r2_enabled is true"
-    );
+    let message = error.to_string();
+    assert!(message.contains("r2_endpoint_env is required when r2_enabled is true"));
+    assert!(message.contains("r2_access_key_id_env is required when r2_enabled is true"));
+    assert!(message.contains("r2_secret_access_key_env is required when r2_enabled is true"));
+    assert!(message.contains("r2_bucket_env is required when r2_enabled is true"));
 }

@@ -56,7 +56,19 @@ fn protected_routes() -> Router<AppState> {
     Router::new()
         .route("/", get(protected_home))
         .route("/cameras", get(camera_routes::list))
+        .route(
+            "/cameras/new",
+            get(camera_routes::new_page).post(camera_routes::create),
+        )
         .route("/cameras/{camera_id}", get(camera_routes::details))
+        .route(
+            "/cameras/{camera_id}/edit",
+            get(camera_routes::edit_page).post(camera_routes::update),
+        )
+        .route(
+            "/cameras/{camera_id}/delete",
+            axum::routing::post(camera_routes::delete),
+        )
         .route("/logout", axum::routing::post(logout))
         .layer(middleware::from_fn(require_auth))
 }

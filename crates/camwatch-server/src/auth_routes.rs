@@ -137,7 +137,7 @@ pub(crate) async fn csrf_token(
     Ok(token)
 }
 
-async fn valid_csrf(session: &Session, provided: &str) -> bool {
+pub(crate) async fn valid_csrf(session: &Session, provided: &str) -> bool {
     let Ok(Some(expected)) = session.get::<String>(CSRF_TOKEN_KEY).await else {
         return false;
     };

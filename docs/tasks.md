@@ -317,6 +317,8 @@ Szczegółowa architektura, decyzje bezpieczeństwa oraz kontrakty między crate
 
 ### WEB-07: CRUD kamer z natychmiastowym przeładowaniem runtime'u
 
+**Status:** Complete
+
 **Pokrywa:** FR-01, NFR-01
 
 **Zakres:** rozszerzyć tabelę i modele kamer o `rtsp_codec` oraz `clip_after_motion`, a następnie dodać `CameraInput`, CRUD w SQLite i formularze `/cameras/new`, `/cameras/:camera_id/edit`. Po zapisie utworzyć lub przeładować wyłącznie runtime zmienionej kamery. Usunięcie wykonuje soft-delete i zatrzymuje runtime, bez kasowania segmentów lub klipów.

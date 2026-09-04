@@ -1,6 +1,7 @@
 use std::{net::SocketAddr, path::PathBuf};
 
 use serde::Deserialize;
+use thiserror::Error;
 
 use super::EnvironmentVariableName;
 
@@ -32,6 +33,63 @@ pub struct AppConfig {
     pub clips_directory: PathBuf,
     #[serde(default = "default_segment_rotation_seconds")]
     pub segment_rotation_seconds: u32,
+}
+
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
+pub enum AppValidationError {
+    #[error("pre_event_seconds cannot exceed rolling_buffer_seconds")]
+    PreEventExceedsRollingBuffer,
+    #[error("post_event_seconds and rolling_buffer_seconds must be greater than zero")]
+    InvalidBufferDuration,
+    #[error("segment_rotation_seconds must be greater than zero")]
+    InvalidSegmentRotation,
+    #[error("segment_rotation_seconds cannot exceed rolling_buffer_seconds")]
+    SegmentRotationExceedsRollingBuffer,
+    #[error("r2_endpoint_env is required when r2_enabled is true")]
+    MissingR2Endpoint,
+    #[error("r2_access_key_id_env is required when r2_enabled is true")]
+    MissingR2AccessKeyId,
+    #[error("r2_secret_access_key_env is required when r2_enabled is true")]
+    MissingR2SecretAccessKey,
+    #[error("r2_bucket_env is required when r2_enabled is true")]
+    MissingR2Bucket,
+}
+
+impl AppConfig {
+    pub fn validate(&self) -> Result<(), Vec<AppValidationError>> {
+        let mut errors = Vec::new();
+        if self.pre_event_seconds > self.rolling_buffer_seconds {
+            errors.push(AppValidationError::PreEventExceedsRollingBuffer);
+        }
+        if self.post_event_seconds == 0 || self.rolling_buffer_seconds == 0 {
+            errors.push(AppValidationError::InvalidBufferDuration);
+        }
+        if self.segment_rotation_seconds == 0 {
+            errors.push(AppValidationError::InvalidSegmentRotation);
+        }
+        if self.segment_rotation_seconds > self.rolling_buffer_seconds {
+            errors.push(AppValidationError::SegmentRotationExceedsRollingBuffer);
+        }
+        if self.r2_enabled {
+            if self.r2_endpoint_env.is_none() {
+                errors.push(AppValidationError::MissingR2Endpoint);
+            }
+            if self.r2_access_key_id_env.is_none() {
+                errors.push(AppValidationError::MissingR2AccessKeyId);
+            }
+            if self.r2_secret_access_key_env.is_none() {
+                errors.push(AppValidationError::MissingR2SecretAccessKey);
+            }
+            if self.r2_bucket_env.is_none() {
+                errors.push(AppValidationError::MissingR2Bucket);
+            }
+        }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
 }
 
 fn default_segment_directory() -> PathBuf {

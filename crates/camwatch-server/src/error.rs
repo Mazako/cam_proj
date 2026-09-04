@@ -21,6 +21,14 @@ impl fmt::Display for NonLoopbackBindAddress {
 impl std::error::Error for NonLoopbackBindAddress {}
 
 #[derive(Debug, Error)]
+pub enum RuntimeReloadError {
+    #[error("invalid camera configuration")]
+    InvalidConfiguration(#[source] ConfigError),
+    #[error("camera stream is unavailable")]
+    StreamUnavailable,
+}
+
+#[derive(Debug, Error)]
 pub enum ServerStartupError {
     #[error("authentication configuration error")]
     AuthenticationConfiguration(#[source] AuthConfigError),
