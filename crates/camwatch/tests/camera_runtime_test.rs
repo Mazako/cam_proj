@@ -1,7 +1,10 @@
 use std::{
     collections::VecDeque,
     fs,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, SystemTime},
 };
 
@@ -22,7 +25,9 @@ struct FakeCameraStream {
     events: VecDeque<Result<CameraStreamEvent, CameraStreamError>>,
 }
 
-struct BlockingCameraStream;
+struct BlockingCameraStream {
+    shutdown_called: Arc<AtomicBool>,
+}
 
 impl CameraStream for FakeCameraStream {
     fn next_event(
@@ -42,6 +47,13 @@ impl CameraStream for BlockingCameraStream {
     ) -> CameraStreamFuture<'_, Result<CameraStreamEvent, CameraStreamError>> {
         Box::pin(std::future::pending())
     }
+
+    fn shutdown(&mut self) -> CameraStreamFuture<'_, ()> {
+        let shutdown_called = Arc::clone(&self.shutdown_called);
+        Box::pin(async move {
+            shutdown_called.store(true, Ordering::Relaxed);
+        })
+    }
 }
 
 #[tokio::test]
@@ -57,10 +69,13 @@ async fn stops_gracefully_when_cancelled_while_waiting_for_stream() {
         clip_sender,
         app_config.clips_directory.clone(),
     ));
+    let shutdown_called = Arc::new(AtomicBool::new(false));
     let runtime = CameraRuntime::new(
         camera_config(),
         &app_config,
-        BlockingCameraStream,
+        BlockingCameraStream {
+            shutdown_called: Arc::clone(&shutdown_called),
+        },
         Arc::new(CameraStatusModel::default()),
         database,
         clip_manager,
@@ -74,6 +89,7 @@ async fn stops_gracefully_when_cancelled_while_waiting_for_stream() {
         .await
         .expect("runtime should stop after cancellation")
         .expect("runtime task should not panic");
+    assert!(shutdown_called.load(Ordering::Relaxed));
 }
 
 #[tokio::test]

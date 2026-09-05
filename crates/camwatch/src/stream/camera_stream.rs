@@ -8,4 +8,8 @@ pub trait CameraStream: Send {
     fn next_event(
         &mut self,
     ) -> CameraStreamFuture<'_, Result<CameraStreamEvent, CameraStreamError>>;
+
+    fn shutdown(&mut self) -> CameraStreamFuture<'_, ()> {
+        Box::pin(async {})
+    }
 }

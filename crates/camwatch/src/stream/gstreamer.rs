@@ -11,6 +11,7 @@ use backon::{BackoffBuilder, ExponentialBuilder};
 use gstreamer::{self as gst, prelude::*};
 use gstreamer_app::{self as gst_app};
 use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 
 use super::{
     CameraStreamError, CameraStreamEvent, CameraStreamStatus, Frame, HlsConfig, PixelFormat,
@@ -22,19 +23,32 @@ pub(super) fn run_worker(
     recording: SegmentRecordingConfig,
     hls: HlsConfig,
     sender: mpsc::Sender<Result<CameraStreamEvent, CameraStreamError>>,
+    cancel: CancellationToken,
 ) {
     let reconnect_backoff = ExponentialBuilder::default()
         .with_jitter()
         .with_min_delay(std::time::Duration::from_secs(1))
-        .with_max_delay(std::time::Duration::from_secs(30))
+        .with_max_delay(std::time::Duration::from_secs(10))
         .without_max_times();
     let mut backoff = reconnect_backoff.build();
     let mut attempt = 0_u64;
 
     loop {
+        if cancel.is_cancelled() {
+            tracing::info!("GStreamer camera worker cancellation requested");
+            return;
+        }
+
         attempt += 1;
         tracing::info!(attempt, "starting GStreamer camera pipeline");
-        let result = run_pipeline(&rtsp_url, &recording, &hls, &sender);
+        let result = run_pipeline(&rtsp_url, &recording, &hls, &sender, &cancel);
+        if cancel.is_cancelled() {
+            tracing::info!(
+                attempt,
+                "GStreamer camera worker stopped after cancellation"
+            );
+            return;
+        }
         let connected = result.is_ok();
         if let Err(error) = result {
             tracing::warn!(
@@ -79,6 +93,7 @@ fn run_pipeline(
     recording: &SegmentRecordingConfig,
     hls: &HlsConfig,
     sender: &mpsc::Sender<Result<CameraStreamEvent, CameraStreamError>>,
+    cancel: &CancellationToken,
 ) -> Result<(), CameraStreamError> {
     let pipeline = build_pipeline(rtsp_url, recording, hls).map_err(|error| {
         tracing::error!(?error, "GStreamer camera pipeline could not be built");
@@ -159,8 +174,11 @@ fn run_pipeline(
     })?;
     let mut segment_times = SegmentTimes::new(SystemTime::now());
     let result = loop {
-        let Some(message) = bus.timed_pop(gst::ClockTime::NONE) else {
-            break Err(CameraStreamError::Unavailable);
+        if cancel.is_cancelled() {
+            break Ok(());
+        }
+        let Some(message) = bus.timed_pop(gst::ClockTime::from_mseconds(100)) else {
+            continue;
         };
 
         match message.view() {

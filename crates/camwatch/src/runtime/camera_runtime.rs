@@ -73,28 +73,35 @@ where
                         camera_id = self.camera_config.id.as_str(),
                         "camera runtime stopped gracefully"
                     );
-                    return;
+                    break;
                 }
                 event = self.stream.next_event() => match event {
-                    Ok(CameraStreamEvent::Status(status)) => self.handle_status_event(status),
-                    Ok(CameraStreamEvent::Frame(frame)) => self.handle_frame_event(frame).await,
+                    Ok(CameraStreamEvent::Status(status)) => {
+                        self.handle_status_event(status);
+                    }
+                    Ok(CameraStreamEvent::Frame(frame)) => {
+                        self.handle_frame_event(frame).await;
+                    }
                     Ok(CameraStreamEvent::SegmentFinalized {
                         path,
                         started_at,
                         ended_at,
-                    }) => self
-                        .handle_segment_finalized_event(path, started_at, ended_at)
-                        .await,
+                    }) => {
+                        self.handle_segment_finalized_event(path, started_at, ended_at)
+                            .await;
+                    }
                     Err(_) => {
                         tracing::warn!(
                             camera_id = self.camera_config.id.as_str(),
                             "camera stream stopped"
                         );
-                        return;
+                        break;
                     }
-                }
+                },
             }
         }
+
+        self.stream.shutdown().await;
     }
 
     fn handle_status_event(&self, status: CameraStreamStatus) {
