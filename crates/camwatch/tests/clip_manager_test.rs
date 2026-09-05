@@ -167,7 +167,6 @@ async fn database_with_camera() -> (TempDir, Database) {
             id: CAMERA_ID.to_owned(),
             name: "Front door".to_owned(),
             rtsp_url: "CAMWATCH_FRONT_DOOR_RTSP_URL".to_owned(),
-            rtsp_codec: "h264".to_owned(),
             onvif_url: None,
             onvif_credentials: None,
             motion_min_area: 1_000,

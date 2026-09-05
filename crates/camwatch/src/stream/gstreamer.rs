@@ -13,13 +13,12 @@ use gstreamer_app::{self as gst_app};
 use tokio::sync::mpsc;
 
 use super::{
-    CameraStreamError, CameraStreamEvent, CameraStreamStatus, Frame, PixelFormat, RtspCodec,
+    CameraStreamError, CameraStreamEvent, CameraStreamStatus, Frame, PixelFormat,
     SegmentRecordingConfig, build_pipeline, segment_times::SegmentTimes,
 };
 
 pub(super) fn run_worker(
     rtsp_url: String,
-    codec: RtspCodec,
     recording: SegmentRecordingConfig,
     sender: mpsc::Sender<Result<CameraStreamEvent, CameraStreamError>>,
 ) {
@@ -31,7 +30,7 @@ pub(super) fn run_worker(
     let mut backoff = reconnect_backoff.build();
 
     loop {
-        let connected = run_pipeline(&rtsp_url, codec, &recording, &sender).is_ok();
+        let connected = run_pipeline(&rtsp_url, &recording, &sender).is_ok();
         if connected {
             backoff = reconnect_backoff.build();
         }
@@ -54,12 +53,10 @@ pub(super) fn run_worker(
 
 fn run_pipeline(
     rtsp_url: &str,
-    codec: RtspCodec,
     recording: &SegmentRecordingConfig,
     sender: &mpsc::Sender<Result<CameraStreamEvent, CameraStreamError>>,
 ) -> Result<(), CameraStreamError> {
-    let pipeline =
-        build_pipeline(rtsp_url, codec, recording).map_err(|_| CameraStreamError::Failed)?;
+    let pipeline = build_pipeline(rtsp_url, recording).map_err(|_| CameraStreamError::Failed)?;
     let appsink = pipeline
         .by_name("analysis_sink")
         .and_downcast::<gst_app::AppSink>()

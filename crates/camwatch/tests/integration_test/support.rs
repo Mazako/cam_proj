@@ -8,7 +8,7 @@ use std::{
 use camwatch::{
     storage::{Database, NewCamera},
     stream::{
-        CameraStream, CameraStreamEvent, CameraStreamStatus, GstreamerCameraStream, RtspCodec,
+        CameraStream, CameraStreamEvent, CameraStreamStatus, GstreamerCameraStream,
         SegmentRecordingConfig,
     },
 };
@@ -112,7 +112,7 @@ impl Drop for TestPublisher {
 
 pub fn camera_stream(url: String, segments: &Path) -> GstreamerCameraStream {
     let recording = SegmentRecordingConfig::new(segments.to_path_buf(), Duration::from_secs(1));
-    GstreamerCameraStream::new(url, RtspCodec::H264, recording).expect("RTSP stream should start")
+    GstreamerCameraStream::new(url, recording).expect("RTSP stream should start")
 }
 
 pub async fn wait_for_rtsp_server(port: u16) {
@@ -207,7 +207,6 @@ pub async fn database_with_camera(directory: &Path) -> Database {
             id: "front-door".to_owned(),
             name: "Front door".to_owned(),
             rtsp_url: "CAMWATCH_FRONT_DOOR_RTSP_URL".to_owned(),
-            rtsp_codec: "h264".to_owned(),
             onvif_url: None,
             onvif_credentials: None,
             motion_min_area: 1000,

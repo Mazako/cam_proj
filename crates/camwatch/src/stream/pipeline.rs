@@ -1,14 +1,13 @@
 use gstreamer::{self as gst, prelude::*};
 
 use super::segment_output::SegmentOutput;
-use super::{PipelineError, RtspCodec, SegmentRecordingConfig, escape_pipeline_value};
+use super::{PipelineError, SegmentRecordingConfig, escape_pipeline_value};
 
 pub fn build_pipeline(
     rtsp_url: &str,
-    codec: RtspCodec,
     recording: &SegmentRecordingConfig,
 ) -> Result<gst::Pipeline, PipelineError> {
-    let description = recording_pipeline_description(rtsp_url, codec, recording.output()?);
+    let description = recording_pipeline_description(rtsp_url, recording.output()?);
     let element = gst::parse::launch(&description).map_err(|_| PipelineError::Build)?;
 
     element
@@ -16,15 +15,9 @@ pub fn build_pipeline(
         .map_err(|_| PipelineError::Build)
 }
 
-fn recording_pipeline_description(
-    rtsp_url: &str,
-    codec: RtspCodec,
-    output: SegmentOutput,
-) -> String {
+fn recording_pipeline_description(rtsp_url: &str, output: SegmentOutput) -> String {
     let rtsp_url = escape_pipeline_value(rtsp_url);
     let location = escape_pipeline_value(output.location.to_string_lossy().as_ref());
-    let (depayloader, parser, decoder) = codec_elements(codec);
-
     format!(
         concat!(
             "rtspsrc ",
@@ -33,15 +26,15 @@ fn recording_pipeline_description(
             "protocols=tcp ",
             "latency=200 ",
             "tcp-timeout=5000000 ",
-            "! {depayloader} ",
+            "! rtph264depay ",
             "name=depayloader ",
-            "! {parser} ",
+            "! h264parse ",
             "name=parser ",
             "config-interval=-1 ",
             "! tee ",
             "name=encoded ",
             "encoded. ! queue ",
-            "! {decoder} ",
+            "! avdec_h264 ",
             "name=decoder ",
             "! videoconvert ",
             "! video/x-raw,format=BGR ",
@@ -62,18 +55,8 @@ fn recording_pipeline_description(
             "send-keyframe-requests=true",
         ),
         rtsp_url = rtsp_url,
-        depayloader = depayloader,
-        parser = parser,
-        decoder = decoder,
         location = location,
         start_index = output.start_index,
         rotation_nanoseconds = output.rotation_nanoseconds,
     )
-}
-
-fn codec_elements(codec: RtspCodec) -> (&'static str, &'static str, &'static str) {
-    match codec {
-        RtspCodec::H264 => ("rtph264depay", "h264parse", "avdec_h264"),
-        RtspCodec::H265 => ("rtph265depay", "h265parse", "avdec_h265"),
-    }
 }

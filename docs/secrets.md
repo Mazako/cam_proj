@@ -71,7 +71,6 @@ rolling_buffer_seconds = 30
 id = "fake-camera"
 name = "Fake camera"
 rtsp_url = "{}"
-rtsp_codec = "h264"
 motion_min_area = 1000
 yolo_confidence = 0.5
 "#,

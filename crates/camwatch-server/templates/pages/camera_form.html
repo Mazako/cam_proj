@@ -35,12 +35,6 @@
         <label for="rtsp-url">RTSP URL</label>
         <input id="rtsp-url" name="rtsp_url" type="url" value="{{ camera.rtsp_url }}" placeholder="rtsp://camera.local:554/stream" {% if is_edit %}{% else %}required{% endif %}>
         {% if is_edit %}<p class="muted">Leave empty to keep the current RTSP URL.</p>{% endif %}
-
-        <label for="rtsp-codec">RTSP codec</label>
-        <select id="rtsp-codec" name="rtsp_codec">
-            <option value="h264" {% if camera.rtsp_codec == "h264" %}selected{% endif %}>H.264</option>
-            <option value="h265" {% if camera.rtsp_codec == "h265" %}selected{% endif %}>H.265</option>
-        </select>
     </fieldset>
 
     <fieldset>

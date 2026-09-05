@@ -19,7 +19,6 @@ segment_rotation_seconds = 2
 id = "fake-camera"
 name = "Fake camera"
 rtsp_url = "enc:v1:aes256gcm:<base64>"
-rtsp_codec = "h264"
 motion_min_area = 1000
 yolo_confidence = 0.50
 clip_after_motion = true

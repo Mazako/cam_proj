@@ -92,7 +92,7 @@ async fn camera_can_be_created_and_saved_when_runtime_is_unavailable() {
             "/cameras/new",
             &cookie,
             &format!(
-                "csrf_token={token}&id=back-yard&name=Back%20yard&rtsp_url=rtsp://camera.local/back-yard&rtsp_codec=h264&motion_min_area=1000&yolo_confidence=0.5&clip_after_motion=on"
+                "csrf_token={token}&id=back-yard&name=Back%20yard&rtsp_url=rtsp://camera.local/back-yard&motion_min_area=1000&yolo_confidence=0.5&clip_after_motion=on"
             ),
         ))
         .await
@@ -132,7 +132,7 @@ async fn camera_can_be_edited_without_reloading_other_runtime_state() {
             "/cameras/front-door/edit",
             &cookie,
             &format!(
-                "csrf_token={token}&id=front-door&name=Updated%20front%20door&rtsp_url=&rtsp_codec=h265&motion_min_area=2000&yolo_confidence=0.7"
+                "csrf_token={token}&id=front-door&name=Updated%20front%20door&rtsp_url=&motion_min_area=2000&yolo_confidence=0.7"
             ),
         ))
         .await
@@ -146,7 +146,6 @@ async fn camera_can_be_edited_without_reloading_other_runtime_state() {
         .expect("updated camera should load")
         .expect("updated camera should exist");
     assert_eq!(camera.name, "Updated front door");
-    assert_eq!(camera.rtsp_codec, "h265");
     assert_eq!(camera.motion_min_area, 2000);
     assert!((camera.yolo_confidence - 0.7).abs() < f64::from(f32::EPSILON));
     assert!(!camera.clip_after_motion);
@@ -174,7 +173,7 @@ async fn invalid_camera_input_renders_errors_without_saving() {
             "/cameras/new",
             &cookie,
             &format!(
-                "csrf_token={token}&id=Bad%20ID&name=&rtsp_url=http://secret&rtsp_codec=h264&motion_min_area=0&yolo_confidence=2"
+                "csrf_token={token}&id=Bad%20ID&name=&rtsp_url=http://secret&motion_min_area=0&yolo_confidence=2"
             ),
         ))
         .await
@@ -258,7 +257,6 @@ rolling_buffer_seconds = 30
 id = "front-door"
 name = "Front door"
 rtsp_url = "{}"
-rtsp_codec = "h264"
 motion_min_area = 1000
 yolo_confidence = 0.5
 clip_after_motion = true

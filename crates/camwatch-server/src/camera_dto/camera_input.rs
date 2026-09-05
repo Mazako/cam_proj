@@ -10,7 +10,6 @@ pub struct CameraInput {
     pub id: String,
     pub name: String,
     pub rtsp_url: String,
-    pub rtsp_codec: String,
     #[serde(default)]
     pub onvif_url: String,
     #[serde(default)]
@@ -37,7 +36,6 @@ impl CameraInput {
             id: self.id.clone(),
             name: self.name.clone(),
             rtsp_url: self.rtsp_url.clone(),
-            rtsp_codec: self.rtsp_codec.clone(),
             onvif_url: self.onvif_url.clone(),
             onvif_credentials: self.onvif_credentials.clone(),
             motion_min_area: self.motion_min_area.clone(),
@@ -57,7 +55,6 @@ impl Default for CameraInput {
             id: String::new(),
             name: String::new(),
             rtsp_url: String::new(),
-            rtsp_codec: "h264".to_owned(),
             onvif_url: String::new(),
             onvif_credentials: String::new(),
             motion_min_area: "1000".to_owned(),
@@ -74,7 +71,6 @@ impl From<CameraDetailsDto> for CameraInput {
             id: camera.summary.id,
             name: camera.summary.name,
             rtsp_url: String::new(),
-            rtsp_codec: camera.rtsp_codec,
             onvif_url: camera.onvif_url.unwrap_or_default(),
             onvif_credentials: String::new(),
             motion_min_area: camera.motion_min_area.to_string(),

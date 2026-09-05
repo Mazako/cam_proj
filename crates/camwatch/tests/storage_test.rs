@@ -17,7 +17,6 @@ async fn persists_cameras_and_segments_after_reopening_the_database() {
             id: "front-door".to_owned(),
             name: "Front door".to_owned(),
             rtsp_url: "CAMWATCH_FRONT_DOOR_RTSP_URL".to_owned(),
-            rtsp_codec: "h264".to_owned(),
             onvif_url: None,
             onvif_credentials: None,
             motion_min_area: 1000,
@@ -73,7 +72,6 @@ async fn persists_cameras_and_segments_after_reopening_the_database() {
         .await
         .expect("camera should load")
         .expect("camera should exist");
-    assert_eq!(camera.rtsp_codec, "h264");
     assert!(camera.clip_after_motion);
     assert_eq!(
         database

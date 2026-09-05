@@ -123,7 +123,6 @@ r2_region = "enc:v1:aes256gcm:<base64>"
 id = "front-door"
 name = "Front door"
 rtsp_url = "enc:v1:aes256gcm:<base64>"
-rtsp_codec = "h264"
 onvif_url = "http://192.168.1.65:2020/onvif/device_service"
 onvif_credentials = "enc:v1:aes256gcm:<base64>"
 motion_min_area = 1000

@@ -3,7 +3,6 @@ pub struct NewCamera {
     pub id: String,
     pub name: String,
     pub rtsp_url: String,
-    pub rtsp_codec: String,
     pub onvif_url: Option<String>,
     pub onvif_credentials: Option<String>,
     pub motion_min_area: i64,

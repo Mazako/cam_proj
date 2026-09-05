@@ -1,7 +1,4 @@
-use camwatch::{
-    config::{Config, SecretManager},
-    stream::RtspCodec,
-};
+use camwatch::config::{Config, SecretManager};
 
 const TEST_KEY: [u8; 32] = [9; 32];
 
@@ -37,7 +34,6 @@ rolling_buffer_seconds = 30
 id = "front-door"
 name = "Front door"
 rtsp_url = "{}"
-rtsp_codec = "h265"
 onvif_url = "{}"
 {}motion_min_area = 1000
 yolo_confidence = 0.5
@@ -61,7 +57,6 @@ fn parses_a_configuration_with_a_camera() {
     let config = parse_config(&valid_config());
 
     assert_eq!(config.cameras.len(), 1);
-    assert_eq!(config.cameras[0].rtsp_codec, RtspCodec::H265);
     assert_eq!(config.app.bind_address.to_string(), "127.0.0.1:8080");
     assert_eq!(
         config.app.segment_directory.to_string_lossy(),
@@ -71,15 +66,6 @@ fn parses_a_configuration_with_a_camera() {
     assert_eq!(config.app.segment_rotation_seconds, 2);
     assert!(!config.app.r2_enabled);
     assert!(!config.cameras[0].clip_after_motion);
-}
-
-#[test]
-fn defaults_camera_codec_to_h264() {
-    let input = valid_config().replace("rtsp_codec = \"h265\"\n", "");
-
-    let config = parse_config(&input);
-
-    assert_eq!(config.cameras[0].rtsp_codec, RtspCodec::H264);
 }
 
 #[test]

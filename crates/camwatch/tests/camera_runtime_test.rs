@@ -131,7 +131,6 @@ async fn queues_clip_with_pre_and_post_window() {
             id: "front-door".to_owned(),
             name: "Front door".to_owned(),
             rtsp_url: "CAMWATCH_FRONT_DOOR_RTSP_URL".to_owned(),
-            rtsp_codec: "h264".to_owned(),
             onvif_url: None,
             onvif_credentials: None,
             motion_min_area: 1000,

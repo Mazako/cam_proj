@@ -57,7 +57,7 @@ pub(crate) fn unix_time_millis(time: SystemTime) -> Option<i64> {
 impl Database {
     pub async fn list_cameras(&self) -> Result<Vec<Camera>, StorageError> {
         query_as::<_, Camera>(
-            "SELECT id, name, enabled, rtsp_url, rtsp_codec, onvif_url,
+            "SELECT id, name, enabled, rtsp_url, onvif_url,
                     onvif_credentials, motion_min_area, yolo_confidence,
                     clip_after_motion, created_at, updated_at, deleted_at
              FROM cameras
@@ -76,15 +76,14 @@ impl Database {
         for camera in cameras {
             sqlx::query(
                 "INSERT INTO cameras (
-                    id, name, enabled, rtsp_url, rtsp_codec, onvif_url,
+                    id, name, enabled, rtsp_url, onvif_url,
                     onvif_credentials, motion_min_area, yolo_confidence,
                     clip_after_motion, created_at, updated_at
-                ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     name = excluded.name,
                     enabled = excluded.enabled,
                     rtsp_url = excluded.rtsp_url,
-                    rtsp_codec = excluded.rtsp_codec,
                     onvif_url = excluded.onvif_url,
                     onvif_credentials = excluded.onvif_credentials,
                     motion_min_area = excluded.motion_min_area,
@@ -96,7 +95,6 @@ impl Database {
             .bind(&camera.id)
             .bind(&camera.name)
             .bind(&camera.rtsp_url)
-            .bind(&camera.rtsp_codec)
             .bind(&camera.onvif_url)
             .bind(&camera.onvif_credentials)
             .bind(camera.motion_min_area)
@@ -125,7 +123,7 @@ impl Database {
 
     pub async fn get_camera(&self, id: &str) -> Result<Option<Camera>, StorageError> {
         let camera = query_as::<_, Camera>(
-            "SELECT id, name, enabled, rtsp_url, rtsp_codec, onvif_url,
+            "SELECT id, name, enabled, rtsp_url, onvif_url,
                     onvif_credentials, motion_min_area, yolo_confidence,
                     clip_after_motion, created_at, updated_at, deleted_at
              FROM cameras WHERE id = ?",

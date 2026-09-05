@@ -86,7 +86,6 @@ impl AppState {
             summary,
             enabled: camera.enabled,
             rtsp_url: camera.rtsp_url,
-            rtsp_codec: camera.rtsp_codec,
             onvif_url: camera.onvif_url,
             onvif_credentials: camera.onvif_credentials,
             motion_min_area: camera.motion_min_area,
@@ -124,9 +123,8 @@ impl AppState {
                 .join(camera_id.as_str()),
             Duration::from_secs(u64::from(self.runtime_config.segment_rotation_seconds)),
         );
-        let stream =
-            GstreamerCameraStream::new(camera.rtsp_url.clone(), camera.rtsp_codec, recording)
-                .map_err(|_| RuntimeReloadError::StreamUnavailable)?;
+        let stream = GstreamerCameraStream::new(camera.rtsp_url.clone(), recording)
+            .map_err(|_| RuntimeReloadError::StreamUnavailable)?;
         let runtime = CameraRuntime::new(
             camera,
             &self.runtime_config,
@@ -239,7 +237,7 @@ pub async fn bootstrap_with_secret_manager(
             app.segment_directory.join(camera_id.as_str()),
             Duration::from_secs(u64::from(app.segment_rotation_seconds)),
         );
-        match GstreamerCameraStream::new(camera.rtsp_url.clone(), camera.rtsp_codec, recording) {
+        match GstreamerCameraStream::new(camera.rtsp_url.clone(), recording) {
             Ok(stream) => {
                 let runtime = CameraRuntime::new(
                     camera,

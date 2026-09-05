@@ -1,7 +1,7 @@
 use std::{fs, time::Duration};
 
 use camwatch::stream::{
-    CameraStreamError, GstreamerCameraStream, RtspCodec, SegmentRecordingConfig, build_pipeline,
+    CameraStreamError, GstreamerCameraStream, SegmentRecordingConfig, build_pipeline,
 };
 use gstreamer::{self as gst, prelude::*};
 use tempfile::tempdir;
@@ -13,7 +13,7 @@ fn builds_an_h264_recording_pipeline() {
     let recording =
         SegmentRecordingConfig::new(directory.path().to_path_buf(), Duration::from_secs(2));
 
-    let pipeline = build_pipeline("rtsp://camera.local/stream1", RtspCodec::H264, &recording)
+    let pipeline = build_pipeline("rtsp://camera.local/stream1", &recording)
         .expect("recording pipeline should build");
 
     assert!(pipeline.by_name("rtsp_source").is_some());
@@ -25,31 +25,13 @@ fn builds_an_h264_recording_pipeline() {
 }
 
 #[test]
-fn builds_an_h265_recording_pipeline() {
-    gst::init().expect("GStreamer should initialize");
-    let directory = tempdir().expect("temporary directory should exist");
-    let recording =
-        SegmentRecordingConfig::new(directory.path().to_path_buf(), Duration::from_secs(2));
-
-    let pipeline = build_pipeline("rtsp://camera.local/stream1", RtspCodec::H265, &recording)
-        .expect("recording pipeline should build");
-
-    let decoder = pipeline.by_name("decoder").expect("decoder should exist");
-
-    assert_eq!(
-        decoder.factory().expect("factory should exist").name(),
-        "avdec_h265"
-    );
-}
-
-#[test]
 fn builds_a_recording_branch_with_mp4_segments() {
     gst::init().expect("GStreamer should initialize");
     let directory = tempdir().expect("temporary directory should exist");
     let recording =
         SegmentRecordingConfig::new(directory.path().to_path_buf(), Duration::from_secs(2));
 
-    let pipeline = build_pipeline("rtsp://camera.local/stream1", RtspCodec::H264, &recording)
+    let pipeline = build_pipeline("rtsp://camera.local/stream1", &recording)
         .expect("recording pipeline should build");
     let segment_sink = pipeline
         .by_name("segment_sink")
@@ -70,7 +52,7 @@ fn recording_pipeline_continues_segment_indexes_after_a_restart() {
     let recording =
         SegmentRecordingConfig::new(directory.path().to_path_buf(), Duration::from_secs(2));
 
-    let pipeline = build_pipeline("rtsp://camera.local/stream1", RtspCodec::H264, &recording)
+    let pipeline = build_pipeline("rtsp://camera.local/stream1", &recording)
         .expect("recording pipeline should build");
     let segment_sink = pipeline
         .by_name("segment_sink")
@@ -83,7 +65,6 @@ fn recording_pipeline_continues_segment_indexes_after_a_restart() {
 fn rejects_a_non_rtsp_url_without_starting_a_camera_worker() {
     let result = GstreamerCameraStream::new(
         "https://camera.local/live".to_owned(),
-        RtspCodec::H264,
         SegmentRecordingConfig::new("not-used".into(), Duration::from_secs(2)),
     );
 

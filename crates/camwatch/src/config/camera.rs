@@ -2,8 +2,6 @@ use serde::Deserialize;
 use thiserror::Error;
 use url::Url;
 
-use crate::stream::RtspCodec;
-
 use super::{CameraId, SecretError, SecretManager};
 
 #[derive(Debug, Deserialize)]
@@ -12,8 +10,6 @@ pub struct CameraConfig {
     pub id: CameraId,
     pub name: String,
     pub rtsp_url: String,
-    #[serde(default)]
-    pub rtsp_codec: RtspCodec,
     pub onvif_url: Option<Url>,
     pub onvif_credentials: Option<String>,
     pub motion_min_area: u32,
@@ -30,8 +26,6 @@ pub enum CameraValidationError {
     EmptyName,
     #[error("rtsp_url must be a valid RTSP URL")]
     InvalidRtspUrl,
-    #[error("rtsp codec must be h264 or h265")]
-    InvalidRtspCodec,
     #[error("motion_min_area must be greater than zero")]
     InvalidMotionMinArea,
     #[error("yolo_confidence must be between 0 and 1")]
@@ -52,7 +46,6 @@ pub struct CameraConfigParts {
     pub id: CameraId,
     pub name: String,
     pub rtsp_url: String,
-    pub rtsp_codec: RtspCodec,
     pub onvif_url: Option<Url>,
     pub onvif_credentials: Option<String>,
     pub motion_min_area: u32,
@@ -64,7 +57,6 @@ pub struct CameraConfigInput {
     pub id: String,
     pub name: String,
     pub rtsp_url: String,
-    pub rtsp_codec: String,
     pub onvif_url: String,
     pub onvif_credentials: String,
     pub motion_min_area: String,
@@ -89,13 +81,6 @@ impl CameraConfigInput {
             Ok(url) if matches!(url.scheme(), "rtsp" | "rtsps") => Some(url.to_string()),
             _ => {
                 errors.push(CameraValidationError::InvalidRtspUrl);
-                None
-            }
-        };
-        let rtsp_codec = match RtspCodec::parse_storage(self.rtsp_codec.trim()) {
-            Some(codec) => Some(codec),
-            None => {
-                errors.push(CameraValidationError::InvalidRtspCodec);
                 None
             }
         };
@@ -127,13 +112,8 @@ impl CameraConfigInput {
                 None
             }
         };
-        let (
-            Some(id),
-            Some(rtsp_url),
-            Some(rtsp_codec),
-            Some(motion_min_area),
-            Some(yolo_confidence),
-        ) = (id, rtsp_url, rtsp_codec, motion_min_area, yolo_confidence)
+        let (Some(id), Some(rtsp_url), Some(motion_min_area), Some(yolo_confidence)) =
+            (id, rtsp_url, motion_min_area, yolo_confidence)
         else {
             return Err(errors);
         };
@@ -144,7 +124,6 @@ impl CameraConfigInput {
             id,
             name: self.name.trim().to_owned(),
             rtsp_url,
-            rtsp_codec,
             onvif_url,
             onvif_credentials,
             motion_min_area,
@@ -160,7 +139,6 @@ impl CameraConfig {
             id: parts.id,
             name: parts.name,
             rtsp_url: parts.rtsp_url,
-            rtsp_codec: parts.rtsp_codec,
             onvif_url: parts.onvif_url,
             onvif_credentials: parts.onvif_credentials,
             motion_min_area: parts.motion_min_area,
@@ -242,13 +220,6 @@ impl CameraConfig {
                 None
             }
         };
-        let rtsp_codec = match RtspCodec::parse_storage(&camera.rtsp_codec) {
-            Some(codec) => Some(codec),
-            None => {
-                errors.push(CameraValidationError::InvalidRtspCodec);
-                None
-            }
-        };
         let onvif_url = match camera.onvif_url {
             Some(value) => match Url::parse(&value) {
                 Ok(url) => Some(url),
@@ -267,8 +238,7 @@ impl CameraConfig {
             }
         };
         let yolo_confidence = camera.yolo_confidence as f32;
-        let (Some(id), Some(rtsp_codec), Some(motion_min_area)) = (id, rtsp_codec, motion_min_area)
-        else {
+        let (Some(id), Some(motion_min_area)) = (id, motion_min_area) else {
             return Err(errors.into());
         };
         if !errors.is_empty() {
@@ -278,7 +248,6 @@ impl CameraConfig {
             id,
             name: camera.name,
             rtsp_url,
-            rtsp_codec,
             onvif_url,
             onvif_credentials,
             motion_min_area,
@@ -306,7 +275,6 @@ impl CameraConfig {
             id: self.id.as_str().to_owned(),
             name: self.name.clone(),
             rtsp_url: secrets.encrypt(&self.rtsp_url)?,
-            rtsp_codec: self.rtsp_codec.as_str().to_owned(),
             onvif_url: self.onvif_url.as_ref().map(ToString::to_string),
             onvif_credentials: self
                 .onvif_credentials

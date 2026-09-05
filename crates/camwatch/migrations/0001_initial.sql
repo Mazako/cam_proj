@@ -3,7 +3,6 @@ CREATE TABLE IF NOT EXISTS cameras (
     name TEXT NOT NULL CHECK (length(trim(name)) > 0),
     enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
     rtsp_url TEXT NOT NULL,
-    rtsp_codec TEXT NOT NULL DEFAULT 'h264' CHECK (rtsp_codec IN ('h264', 'h265')),
     onvif_url TEXT,
     onvif_credentials TEXT,
     motion_min_area INTEGER NOT NULL CHECK (motion_min_area > 0),

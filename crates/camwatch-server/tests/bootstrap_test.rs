@@ -65,7 +65,6 @@ async fn bootstraps_directly_in_the_server_without_external_integrations() {
         .expect("camera details should load")
         .expect("camera details should exist");
     assert_eq!(details.summary.id, "front-door");
-    assert_eq!(details.rtsp_codec, "h264");
     assert!(details.clip_after_motion);
     assert!(
         state
@@ -85,7 +84,6 @@ async fn upserts_toml_cameras_and_reloads_them_from_database() {
         &database_path,
         false,
         "Front door",
-        "h264",
         true,
     ))
     .await
@@ -95,7 +93,6 @@ async fn upserts_toml_cameras_and_reloads_them_from_database() {
         &database_path,
         false,
         "Updated front door",
-        "h265",
         false,
     ))
     .await
@@ -107,7 +104,6 @@ async fn upserts_toml_cameras_and_reloads_them_from_database() {
         .expect("camera should load")
         .expect("camera should exist");
     assert_eq!(camera.name, "Updated front door");
-    assert_eq!(camera.rtsp_codec, "h265");
     assert!(!camera.clip_after_motion);
 
     let restarted_state = bootstrap(config_without_cameras(&database_path))
@@ -131,14 +127,13 @@ async fn returns_a_controlled_error_for_invalid_enabled_r2() {
 }
 
 fn config(database_path: &Path, r2_enabled: bool) -> Config {
-    config_with_camera(database_path, r2_enabled, "Front door", "h264", true)
+    config_with_camera(database_path, r2_enabled, "Front door", true)
 }
 
 fn config_with_camera(
     database_path: &Path,
     r2_enabled: bool,
     name: &str,
-    rtsp_codec: &str,
     clip_after_motion: bool,
 ) -> Config {
     let r2 = if r2_enabled {
@@ -180,7 +175,6 @@ rolling_buffer_seconds = 30
 id = "front-door"
 name = "Front door"
 rtsp_url = "{}"
-rtsp_codec = "h264"
 motion_min_area = 1000
 yolo_confidence = 0.5
 clip_after_motion = true
@@ -192,10 +186,6 @@ clip_after_motion = true
             .expect("test secret should encrypt"),
     )
     .replace("name = \"Front door\"", &format!("name = \"{name}\""))
-    .replace(
-        "rtsp_codec = \"h264\"",
-        &format!("rtsp_codec = \"{rtsp_codec}\""),
-    )
     .replace(
         "clip_after_motion = true",
         &format!("clip_after_motion = {clip_after_motion}"),

@@ -321,7 +321,7 @@ Szczegółowa architektura, decyzje bezpieczeństwa oraz kontrakty między crate
 
 **Pokrywa:** FR-01, NFR-01
 
-**Zakres:** rozszerzyć tabelę i modele kamer o `rtsp_codec` oraz `clip_after_motion`, a następnie dodać `CameraInput`, CRUD w SQLite i formularze `/cameras/new`, `/cameras/:camera_id/edit`. Po zapisie utworzyć lub przeładować wyłącznie runtime zmienionej kamery. Usunięcie wykonuje soft-delete i zatrzymuje runtime, bez kasowania segmentów lub klipów.
+**Zakres:** rozszerzyć tabelę i modele kamer o `clip_after_motion`, a następnie dodać `CameraInput`, CRUD w SQLite i formularze `/cameras/new`, `/cameras/:camera_id/edit`. Po zapisie utworzyć lub przeładować wyłącznie runtime zmienionej kamery. Usunięcie wykonuje soft-delete i zatrzymuje runtime, bez kasowania segmentów lub klipów.
 
 **Kryteria akceptacji:**
 
