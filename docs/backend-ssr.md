@@ -145,7 +145,7 @@ Minimalne dane widoczne z backendu:
 - `id` i nazwa kamery;
 - status `online` lub `offline` oraz czas ostatniej zmiany;
 - flaga `ptz_available`;
-- ścieżka lub identyfikator playlisty HLS, gdy VID-04 będzie gotowe.
+- URL playlisty HLS dla podglądu kamery.
 
 ### Mapa runtime'ów kamer
 
@@ -301,7 +301,7 @@ Elementy:
 
 - breadcrumb lub link powrotu do listy;
 - nazwa i status kamery;
-- obszar live preview HLS, gdy VID-04 będzie gotowe;
+- działający obszar live preview HLS;
 - komunikat o niedostępnym strumieniu;
 - panel PTZ z czterema przyciskami tylko dla kamer z `ptz_available = true`;
 - czytelny komunikat po błędzie PTZ.
@@ -460,9 +460,9 @@ Należy dodać limit prób logowania na IP lub przynajmniej opóźnienie po seri
 
 ## HLS i assety
 
-Aktualny runtime nie udostępnia jeszcze HLS; widok kamery ma przygotować miejsce na tę funkcję, ale odtwarzacz zależy od taska VID-04.
+Runtime tworzy playlistę HLS i fragmenty w osobnym katalogu per kamera. Widok kamery odtwarza playlistę przez natywny mechanizm Safari albo lokalny `hls.js`.
 
-Nie wystawiać całego katalogu `data/` przez `ServeDir`. W przyszłości HLS musi być serwowane przez ograniczone, uwierzytelnione endpointy, które mapują znane `camera_id` na właściwy katalog playlisty. Nie wolno przyjmować ścieżki pliku od użytkownika.
+Nie wystawiać całego katalogu `data/` przez `ServeDir`. HLS jest serwowane przez ograniczone, uwierzytelnione endpointy, które mapują znane `camera_id` na właściwy katalog playlisty. Nazwa fragmentu jest walidowana i nie jest przyjmowana jako dowolna ścieżka pliku.
 
 HLS ma różne wsparcie przeglądarek. Safari odtwarza je natywnie, natomiast Chrome i Firefox zwykle potrzebują małego klienta `hls.js`. `hls.js` jest wymaganym elementem panelu i ma być serwowany lokalnie; nie zmienia to architektury SSR ani nie tworzy SPA.
 
@@ -516,11 +516,11 @@ Testy HTTP powinny działać bez GStreamera, kamery, ONVIF, R2 ani prawdziwej ba
 3. Dodać in-memory rejestr kamer i odczytowe modele UI w crate'ie `camwatch`.
 4. Dodać Axum router, `AppState`, obsługę błędów i bazowy layout Askama.
 5. Dodać logowanie, sesje, middleware autoryzacji, CSRF oraz logout.
-6. Zaimplementować `/cameras` i `/cameras/:camera_id` bez HLS.
+6. Zaimplementować `/cameras` i `/cameras/:camera_id` z miejscem na podgląd HLS.
 7. Dodać CRUD kamer w SQLite wraz z kontrolowanym przeładowaniem pojedynczego runtime'u.
 8. Udostępnić bezpieczny endpoint PTZ jako krótkie ruchy.
 9. Dodać endpointy htmx do odświeżania statusów, aktywności, formularzy i odpowiedzi PTZ.
-10. Po ukończeniu VID-04 dodać chronione HLS do widoku kamery.
+10. Dodać chronione HLS do widoku kamery po ukończeniu pipeline’u VID-04.
 11. Osobno wykonać testy R2 opisane w backlogu.
 
 Po każdym etapie uruchomić co najmniej `cargo check`, właściwe testy crate'a, `cargo clippy -- -D warnings` i `git diff --check`.

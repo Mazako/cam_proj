@@ -8,7 +8,7 @@ use std::{
 use camwatch::{
     storage::{Database, NewCamera},
     stream::{
-        CameraStream, CameraStreamEvent, CameraStreamStatus, GstreamerCameraStream,
+        CameraStream, CameraStreamEvent, CameraStreamStatus, GstreamerCameraStream, HlsConfig,
         SegmentRecordingConfig,
     },
 };
@@ -112,7 +112,8 @@ impl Drop for TestPublisher {
 
 pub fn camera_stream(url: String, segments: &Path) -> GstreamerCameraStream {
     let recording = SegmentRecordingConfig::new(segments.to_path_buf(), Duration::from_secs(1));
-    GstreamerCameraStream::new(url, recording).expect("RTSP stream should start")
+    let hls = HlsConfig::new(segments.join("hls"));
+    GstreamerCameraStream::new(url, recording, hls).expect("RTSP stream should start")
 }
 
 pub async fn wait_for_rtsp_server(port: u16) {

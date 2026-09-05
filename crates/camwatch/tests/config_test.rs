@@ -63,6 +63,7 @@ fn parses_a_configuration_with_a_camera() {
         "data/segments"
     );
     assert_eq!(config.app.clips_directory.to_string_lossy(), "data/clips");
+    assert_eq!(config.app.hls_directory.to_string_lossy(), "data/hls");
     assert_eq!(config.app.segment_rotation_seconds, 2);
     assert!(!config.app.r2_enabled);
     assert!(!config.cameras[0].clip_after_motion);

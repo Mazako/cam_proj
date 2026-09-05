@@ -9,7 +9,7 @@ use crate::{
     auth_routes::{self, login, login_page, logout, protected_home, require_auth},
     camera_routes,
     error::NonLoopbackBindAddress,
-    views,
+    hls_routes, views,
 };
 
 pub fn validate_bind_address(address: SocketAddr) -> Result<(), NonLoopbackBindAddress> {
@@ -61,6 +61,8 @@ fn protected_routes() -> Router<AppState> {
             get(camera_routes::new_page).post(camera_routes::create),
         )
         .route("/cameras/{camera_id}", get(camera_routes::details))
+        .route("/hls/{camera_id}/index.m3u8", get(hls_routes::playlist))
+        .route("/hls/{camera_id}/{segment_name}", get(hls_routes::segment))
         .route(
             "/cameras/{camera_id}/edit",
             get(camera_routes::edit_page).post(camera_routes::update),

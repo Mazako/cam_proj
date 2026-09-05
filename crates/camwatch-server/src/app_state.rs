@@ -6,10 +6,11 @@ use camwatch::{
     config::{AppConfig, CameraConfig, Config, SecretManager},
     runtime::CameraRuntime,
     storage::{Camera, Database, NewCamera, StorageError},
-    stream::{CameraStatusModel, GstreamerCameraStream, SegmentRecordingConfig},
+    stream::{CameraStatusModel, GstreamerCameraStream, HlsConfig, SegmentRecordingConfig},
 };
 use dashmap::DashMap;
 use std::time::Duration;
+use tokio::sync::Mutex;
 
 use crate::auth::AuthService;
 use crate::camera_dto::{CameraDetailsDto, CameraSummaryDto};
@@ -23,6 +24,7 @@ pub struct AppState {
     pub clip_manager: Arc<ClipManager>,
     pub status_model: Arc<CameraStatusModel>,
     pub camera_runtimes: Arc<DashMap<String, RuntimeTask>>,
+    runtime_reload_locks: Arc<DashMap<String, Arc<Mutex<()>>>>,
     pub runtime_config: Arc<AppConfig>,
     pub secret_manager: Arc<SecretManager>,
 }
@@ -43,6 +45,7 @@ impl AppState {
             clip_manager,
             status_model,
             camera_runtimes,
+            runtime_reload_locks: Arc::new(DashMap::new()),
             runtime_config,
             secret_manager,
         }
@@ -95,6 +98,12 @@ impl AppState {
     }
 
     pub async fn stop_runtime(&self, camera_id: &str) {
+        let lock = self.runtime_reload_lock(camera_id);
+        let _guard = lock.lock().await;
+        self.stop_runtime_unlocked(camera_id).await;
+    }
+
+    async fn stop_runtime_unlocked(&self, camera_id: &str) {
         let runtime = self.camera_runtimes.remove(camera_id);
         if let Some(runtime) = runtime {
             runtime.1.stop().await;
@@ -117,13 +126,18 @@ impl AppState {
         let camera_id = camera.id.clone();
         let camera = CameraConfig::from_storage(camera, &self.secret_manager)
             .map_err(RuntimeReloadError::InvalidConfiguration)?;
+        let lock = self.runtime_reload_lock(&camera_id);
+        let _guard = lock.lock().await;
+        self.stop_runtime_unlocked(&camera_id).await;
+
         let recording = SegmentRecordingConfig::new(
             self.runtime_config
                 .segment_directory
                 .join(camera_id.as_str()),
             Duration::from_secs(u64::from(self.runtime_config.segment_rotation_seconds)),
         );
-        let stream = GstreamerCameraStream::new(camera.rtsp_url.clone(), recording)
+        let hls = HlsConfig::new(self.runtime_config.hls_directory.join(camera_id.as_str()));
+        let stream = GstreamerCameraStream::new(camera.rtsp_url.clone(), recording, hls)
             .map_err(|_| RuntimeReloadError::StreamUnavailable)?;
         let runtime = CameraRuntime::new(
             camera,
@@ -135,10 +149,16 @@ impl AppState {
         )
         .await;
 
-        self.stop_runtime(&camera_id).await;
         self.camera_runtimes
             .insert(camera_id, RuntimeTask::spawn(runtime));
         Ok(())
+    }
+
+    fn runtime_reload_lock(&self, camera_id: &str) -> Arc<Mutex<()>> {
+        self.runtime_reload_locks
+            .entry(camera_id.to_owned())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone()
     }
 
     fn camera_summary(&self, camera: &Camera) -> CameraSummaryDto {
@@ -237,7 +257,8 @@ pub async fn bootstrap_with_secret_manager(
             app.segment_directory.join(camera_id.as_str()),
             Duration::from_secs(u64::from(app.segment_rotation_seconds)),
         );
-        match GstreamerCameraStream::new(camera.rtsp_url.clone(), recording) {
+        let hls = HlsConfig::new(app.hls_directory.join(camera_id.as_str()));
+        match GstreamerCameraStream::new(camera.rtsp_url.clone(), recording, hls) {
             Ok(stream) => {
                 let runtime = CameraRuntime::new(
                     camera,

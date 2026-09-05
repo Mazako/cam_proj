@@ -31,6 +31,8 @@ pub struct AppConfig {
     pub segment_directory: PathBuf,
     #[serde(default = "default_clips_directory")]
     pub clips_directory: PathBuf,
+    #[serde(default = "default_hls_directory")]
+    pub hls_directory: PathBuf,
     #[serde(default = "default_segment_rotation_seconds")]
     pub segment_rotation_seconds: u32,
 }
@@ -119,6 +121,10 @@ fn default_segment_directory() -> PathBuf {
 
 fn default_clips_directory() -> PathBuf {
     PathBuf::from("data/clips")
+}
+
+fn default_hls_directory() -> PathBuf {
+    PathBuf::from("data/hls")
 }
 
 fn default_segment_rotation_seconds() -> u32 {

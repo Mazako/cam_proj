@@ -1,19 +1,16 @@
-use std::{path::Path, sync::Arc, time::SystemTime};
+use std::time::SystemTime;
 
-use axum::{
-    body::{Body, to_bytes},
-    http::{Request, StatusCode, header},
-};
-use camwatch::{
-    config::{Config, SecretManager},
-    stream::CameraStreamStatus,
-};
-use camwatch_server::{
-    app_state::{AppState, bootstrap_with_secret_manager},
-    router::router_with_session_expiry,
-};
+use axum::http::{StatusCode, header};
+use camwatch::stream::CameraStreamStatus;
+use camwatch_server::router::router_with_session_expiry;
 use time::Duration;
 use tower::ServiceExt;
+
+mod support;
+use support::{
+    cookie_request, csrf_token, form_request, login_with_default_credentials, response_body,
+    test_context,
+};
 
 #[tokio::test]
 async fn camera_list_renders_full_ssr_page_with_current_status() {
@@ -54,7 +51,9 @@ async fn camera_details_render_full_ssr_page() {
     assert_eq!(response.status(), StatusCode::OK);
     let body = response_body(response).await;
     assert!(body.contains("Camera identifier: <code>front-door</code>"));
-    assert!(body.contains("Preview is not available yet"));
+    assert!(body.contains("data-hls-source=\"/hls/front-door/index.m3u8\""));
+    assert!(body.contains("/assets/hls.min.js"));
+    assert!(body.contains("/assets/hls_player.js"));
     assert!(body.contains("<dt>PTZ</dt>"));
     assert!(!body.contains("hx-"));
 }
@@ -221,133 +220,4 @@ async fn camera_delete_soft_deletes_record_and_stops_runtime() {
     assert!(camera.deleted_at.is_some());
     assert!(state.camera_summaries().await.unwrap().is_empty());
     assert!(state.camera_details("front-door").await.unwrap().is_none());
-}
-
-struct TestContext {
-    _directory: tempfile::TempDir,
-    state: AppState,
-}
-
-async fn test_context() -> TestContext {
-    let directory = tempfile::tempdir().expect("temporary directory should exist");
-    let database_path = directory.path().join("camwatch.sqlite3");
-    let state = bootstrap_with_secret_manager(
-        config(&database_path),
-        Arc::new(SecretManager::from_key([9; 32])),
-    )
-    .await
-    .expect("test server should bootstrap");
-    TestContext {
-        _directory: directory,
-        state,
-    }
-}
-
-fn config(database_path: &Path) -> Config {
-    let contents = format!(
-        r#"
-[app]
-bind_address = "127.0.0.1:8080"
-database_path = "{}"
-pre_event_seconds = 10
-post_event_seconds = 20
-rolling_buffer_seconds = 30
-
-[[cameras]]
-id = "front-door"
-name = "Front door"
-rtsp_url = "{}"
-motion_min_area = 1000
-yolo_confidence = 0.5
-clip_after_motion = true
-"#,
-        database_path.display(),
-        SecretManager::from_key([9; 32])
-            .encrypt("rtsp://camera.local/front-door")
-            .expect("test secret should encrypt")
-    );
-    Config::parse(&contents).expect("test configuration should parse")
-}
-
-async fn login_with_default_credentials(app: &axum::Router) -> String {
-    let login_page = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .uri("/login")
-                .body(Body::empty())
-                .expect("login request should be valid"),
-        )
-        .await
-        .expect("login page request should complete");
-    let cookie = session_cookie(&login_page);
-    let token = csrf_token(&response_body(login_page).await);
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/login")
-                .header(header::COOKIE, &cookie)
-                .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-                .body(Body::from(format!(
-                    "login=admin&password=admin&csrf_token={token}"
-                )))
-                .expect("login request should be valid"),
-        )
-        .await
-        .expect("login request should complete");
-    assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    session_cookie(&response)
-}
-
-fn cookie_request(uri: &str, cookie: &str) -> Request<Body> {
-    Request::builder()
-        .uri(uri)
-        .header(header::COOKIE, cookie)
-        .body(Body::empty())
-        .expect("cookie request should be valid")
-}
-
-fn form_request(uri: &str, cookie: &str, form: &str) -> Request<Body> {
-    Request::builder()
-        .method("POST")
-        .uri(uri)
-        .header(header::COOKIE, cookie)
-        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .body(Body::from(form.to_owned()))
-        .expect("form request should be valid")
-}
-
-fn session_cookie(response: &axum::response::Response) -> String {
-    response
-        .headers()
-        .get(header::SET_COOKIE)
-        .expect("response should set a session cookie")
-        .to_str()
-        .expect("session cookie should be valid HTTP")
-        .split(';')
-        .next()
-        .expect("session cookie should contain a value")
-        .to_owned()
-}
-
-async fn response_body(response: axum::response::Response) -> String {
-    let bytes = to_bytes(response.into_body(), usize::MAX)
-        .await
-        .expect("response body should be readable");
-    String::from_utf8(bytes.to_vec()).expect("response body should be UTF-8")
-}
-
-fn csrf_token(body: &str) -> String {
-    let marker = r#"name="csrf_token" value=""#;
-    let start = body
-        .find(marker)
-        .expect("rendered form should contain csrf token")
-        + marker.len();
-    let end = body[start..]
-        .find('"')
-        .expect("csrf token should be closed")
-        + start;
-    body[start..end].to_owned()
 }

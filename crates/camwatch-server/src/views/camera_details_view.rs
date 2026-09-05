@@ -15,6 +15,7 @@ pub struct CameraDetailsView {
 pub struct CameraDetailsItemView {
     pub id: String,
     pub name: String,
+    pub hls_playlist_url: String,
     pub stream_status: &'static str,
     pub runtime_status: &'static str,
     pub ptz_status: &'static str,
@@ -32,8 +33,10 @@ impl CameraDetailsView {
 
 impl From<CameraDetailsDto> for CameraDetailsItemView {
     fn from(camera: CameraDetailsDto) -> Self {
+        let id = camera.summary.id;
         Self {
-            id: camera.summary.id,
+            hls_playlist_url: format!("/hls/{id}/index.m3u8"),
+            id,
             name: camera.summary.name,
             stream_status: stream_status_label(camera.summary.stream_status),
             runtime_status: if camera.summary.runtime_running {

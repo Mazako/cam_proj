@@ -50,7 +50,7 @@ a {
   gap: 1rem;
 }
 .camera-card,
-.preview-placeholder,
+.preview-card,
 .empty-state {
   padding: 1.5rem;
   border: 1px solid #d9deea;
@@ -64,12 +64,12 @@ a {
   align-items: start;
 }
 .camera-card h2,
-.preview-placeholder h2,
+.preview-card h2,
 .empty-state h2 {
   margin-top: 0;
 }
 .camera-card .eyebrow,
-.preview-placeholder .eyebrow {
+.preview-card .eyebrow {
   margin-bottom: 0.5rem;
 }
 .camera-status-list {
@@ -111,10 +111,15 @@ a {
   grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr);
   gap: 1rem;
 }
-.preview-placeholder {
+.preview-card {
   min-height: 18rem;
-  display: grid;
-  align-content: center;
+}
+.camera-preview {
+  display: block;
+  width: 100%;
+  min-height: 12rem;
+  border-radius: 0.5rem;
+  background: #111827;
 }
 .muted {
   color: #5c6780;

@@ -13,6 +13,7 @@ r2_prefix = "enc:v1:aes256gcm:<base64>"
 r2_region = "enc:v1:aes256gcm:<base64>"
 segment_directory = "data/fake-camera-segments"
 clips_directory = "data/fake-camera-clips"
+hls_directory = "data/fake-camera-hls"
 segment_rotation_seconds = 2
 
 [[cameras]]

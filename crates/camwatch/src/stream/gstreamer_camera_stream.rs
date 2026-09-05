@@ -5,7 +5,8 @@ use tokio::sync::mpsc;
 use url::Url;
 
 use super::{
-    CameraStream, CameraStreamError, CameraStreamEvent, CameraStreamFuture, SegmentRecordingConfig,
+    CameraStream, CameraStreamError, CameraStreamEvent, CameraStreamFuture, HlsConfig,
+    SegmentRecordingConfig,
 };
 
 const EVENT_BUFFER_CAPACITY: usize = 8;
@@ -18,6 +19,7 @@ impl GstreamerCameraStream {
     pub fn new(
         rtsp_url: String,
         recording: SegmentRecordingConfig,
+        hls: HlsConfig,
     ) -> Result<Self, CameraStreamError> {
         let url = Url::parse(&rtsp_url).map_err(|_| CameraStreamError::Unavailable)?;
         if !matches!(url.scheme(), "rtsp" | "rtsps") {
@@ -28,7 +30,7 @@ impl GstreamerCameraStream {
         let (sender, receiver) = mpsc::channel(EVENT_BUFFER_CAPACITY);
         thread::Builder::new()
             .name("camwatch-rtsp".to_owned())
-            .spawn(move || super::gstreamer::run_worker(rtsp_url, recording, sender))
+            .spawn(move || super::gstreamer::run_worker(rtsp_url, recording, hls, sender))
             .map_err(|_| CameraStreamError::Failed)?;
 
         Ok(Self { receiver })

@@ -4,6 +4,7 @@ mod auth_routes;
 pub mod camera_dto;
 mod camera_routes;
 pub mod error;
+mod hls_routes;
 pub mod router;
 pub mod runtime_task;
 pub mod views;

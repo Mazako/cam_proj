@@ -303,7 +303,7 @@ Szczegółowa architektura, decyzje bezpieczeństwa oraz kontrakty między crate
 
 **Status:** Complete
 
-**Zakres:** zaimplementować `GET /cameras`, `GET /cameras/:camera_id` jako pełne strony SSR. Lista pokazuje karty kamer, status RTSP i dostępność PTZ. Szczegóły pokazują status, placeholder live preview HLS oraz PTZ. Nie dodawać historii zdarzeń ani stanu klipu/uploadu. Interakcje htmx pozostają poza zakresem tego zadania.
+**Zakres:** zaimplementować `GET /cameras`, `GET /cameras/:camera_id` jako pełne strony SSR. Lista pokazuje karty kamer, status RTSP i dostępność PTZ. Szczegóły pokazują status, podgląd live HLS oraz PTZ. Nie dodawać historii zdarzeń ani stanu klipu/uploadu. Interakcje htmx pozostają poza zakresem tego zadania.
 
 **Kryteria akceptacji:**
 

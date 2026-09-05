@@ -118,6 +118,7 @@ r2_secret_access_key = "enc:v1:aes256gcm:<base64>"
 r2_bucket = "enc:v1:aes256gcm:<base64>"
 r2_prefix = "enc:v1:aes256gcm:<base64>"
 r2_region = "enc:v1:aes256gcm:<base64>"
+hls_directory = "data/hls"
 
 [[cameras]]
 id = "front-door"
