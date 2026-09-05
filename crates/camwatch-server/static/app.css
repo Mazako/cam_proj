@@ -124,6 +124,39 @@ a {
 .muted {
   color: #5c6780;
 }
+.ptz-controls {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #edf0f6;
+}
+.ptz-controls h2 {
+  font-size: 1.1rem;
+}
+.ptz-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  max-width: 12rem;
+  margin-top: 1rem;
+}
+.ptz-grid form {
+  margin: 0;
+}
+.ptz-grid form:nth-child(1) {
+  grid-column: 2;
+}
+.ptz-grid form:nth-child(2) {
+  grid-column: 1;
+}
+.ptz-grid form:nth-child(3) {
+  grid-column: 3;
+}
+.ptz-grid form:nth-child(4) {
+  grid-column: 2;
+}
+.ptz-grid button {
+  width: 100%;
+}
 .actions form {
   margin: 0;
 }

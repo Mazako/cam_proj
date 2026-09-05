@@ -1,12 +1,13 @@
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
-use camwatch::{runtime::CameraRuntime, stream::CameraStream};
+use camwatch::{onvif::OnvifConnection, runtime::CameraRuntime, stream::CameraStream};
 
 pub struct RuntimeTask {
     cancel: CancellationToken,
     task: JoinHandle<()>,
     pub ptz_available: bool,
+    ptz: Option<OnvifConnection>,
 }
 
 impl RuntimeTask {
@@ -14,7 +15,8 @@ impl RuntimeTask {
     where
         S: CameraStream + 'static,
     {
-        let ptz_available = runtime.has_ptz();
+        let ptz = runtime.ptz_connection();
+        let ptz_available = ptz.is_some();
         let cancel = CancellationToken::new();
         let task = tokio::spawn(runtime.run(cancel.clone()));
 
@@ -22,7 +24,12 @@ impl RuntimeTask {
             cancel,
             task,
             ptz_available,
+            ptz,
         }
+    }
+
+    pub fn ptz_connection(&self) -> Option<OnvifConnection> {
+        self.ptz.clone()
     }
 
     pub fn is_running(&self) -> bool {

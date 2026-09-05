@@ -1,6 +1,6 @@
 use axum::{
     extract::{Form, Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Redirect, Response},
 };
 use serde::Deserialize;
@@ -10,8 +10,8 @@ use crate::{
     app_state::AppState,
     auth_routes,
     camera_dto::{CameraFormError, CameraInput},
-    error::RuntimeReloadError,
-    views::{self, CameraFormView},
+    error::{PtzCommandError, RuntimeReloadError},
+    views::{self, CameraFormView, PtzFeedbackView},
 };
 
 #[derive(Debug, Deserialize)]
@@ -264,6 +264,62 @@ pub(crate) async fn details(
     }
 }
 
+pub(crate) async fn ptz(
+    State(state): State<AppState>,
+    Path((camera_id, direction)): Path<(String, String)>,
+    headers: HeaderMap,
+    session: Session,
+    Form(form): Form<CsrfForm>,
+) -> Response {
+    let Some(direction) = parse_ptz_direction(&direction) else {
+        return views::not_found_response();
+    };
+    if !auth_routes::valid_csrf(&session, &form.csrf_token).await {
+        return views::forbidden_response();
+    }
+    let csrf_token = match auth_routes::csrf_token(&session).await {
+        Ok(token) => token,
+        Err(_) => return views::internal_error_response(),
+    };
+    let is_htmx = headers
+        .get("HX-Request")
+        .and_then(|value| value.to_str().ok())
+        == Some("true");
+
+    match state.move_ptz(&camera_id, direction).await {
+        Ok(()) => {
+            if is_htmx {
+                views::ptz_feedback_response(
+                    StatusCode::OK,
+                    PtzFeedbackView::new("Movement completed.", "muted"),
+                )
+            } else {
+                Redirect::to(&format!("/cameras/{camera_id}")).into_response()
+            }
+        }
+        Err(error) => {
+            let (status, message) = match error {
+                PtzCommandError::Unavailable => (
+                    StatusCode::CONFLICT,
+                    "PTZ is not available for this camera.",
+                ),
+                PtzCommandError::Failed => (
+                    StatusCode::BAD_GATEWAY,
+                    "Camera movement failed. Try again.",
+                ),
+            };
+            if is_htmx {
+                views::ptz_feedback_response(
+                    StatusCode::OK,
+                    PtzFeedbackView::new(message, "form-error"),
+                )
+            } else {
+                ptz_error_page(&state, &camera_id, csrf_token, status, message).await
+            }
+        }
+    }
+}
+
 async fn reload_camera_runtime(state: &AppState, camera_id: &str) {
     let camera = match state.database.get_camera(camera_id).await {
         Ok(Some(camera)) => camera,
@@ -285,6 +341,37 @@ async fn reload_camera_runtime(state: &AppState, camera_id: &str) {
                 tracing::error!(camera_id, "saved camera configuration is invalid")
             }
         }
+    }
+}
+
+fn parse_ptz_direction(direction: &str) -> Option<camwatch::onvif::PtzDirection> {
+    const SPEED: f32 = 0.5;
+    match direction {
+        "up" => Some(camwatch::onvif::PtzDirection::Up(SPEED)),
+        "down" => Some(camwatch::onvif::PtzDirection::Down(SPEED)),
+        "left" => Some(camwatch::onvif::PtzDirection::Left(SPEED)),
+        "right" => Some(camwatch::onvif::PtzDirection::Right(SPEED)),
+        _ => None,
+    }
+}
+
+async fn ptz_error_page(
+    state: &AppState,
+    camera_id: &str,
+    csrf_token: String,
+    status: StatusCode,
+    message: &'static str,
+) -> Response {
+    match state.camera_details(camera_id).await {
+        Ok(Some(camera)) => views::camera_details_page_response_with_ptz_message(
+            status,
+            csrf_token,
+            camera,
+            message,
+            "form-error",
+        ),
+        Ok(None) => views::not_found_response(),
+        Err(_) => views::internal_error_response(),
     }
 }
 

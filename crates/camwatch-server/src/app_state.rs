@@ -4,6 +4,7 @@ use camwatch::{
     bucket::{BucketUploader, NoOpBucketUploader, R2Client},
     clips::{ClipManager, create_clip_uploader_worker, create_clip_worker, create_retainer_worker},
     config::{AppConfig, CameraConfig, Config, SecretManager},
+    onvif::PtzDirection,
     runtime::CameraRuntime,
     storage::{Camera, Database, NewCamera, StorageError},
     stream::{CameraStatusModel, GstreamerCameraStream, HlsConfig, SegmentRecordingConfig},
@@ -14,7 +15,7 @@ use tokio::sync::Mutex;
 
 use crate::auth::AuthService;
 use crate::camera_dto::{CameraDetailsDto, CameraSummaryDto};
-use crate::error::{RuntimeReloadError, ServerStartupError};
+use crate::error::{PtzCommandError, RuntimeReloadError, ServerStartupError};
 use crate::runtime_task::RuntimeTask;
 
 #[derive(Clone)]
@@ -61,6 +62,44 @@ impl AppState {
         self.camera_runtimes
             .get(camera_id)
             .is_some_and(|runtime| runtime.is_running() && runtime.ptz_available)
+    }
+
+    pub async fn move_ptz(
+        &self,
+        camera_id: &str,
+        direction: PtzDirection,
+    ) -> Result<(), PtzCommandError> {
+        let lock = self.runtime_reload_lock(camera_id);
+        let _guard = lock.lock().await;
+        let ptz = self
+            .camera_runtimes
+            .get(camera_id)
+            .filter(|runtime| runtime.is_running())
+            .and_then(|runtime| runtime.ptz_connection())
+            .ok_or(PtzCommandError::Unavailable)?;
+
+        tracing::info!(camera_id, ?direction, "PTZ command started");
+        let started_at = std::time::Instant::now();
+        match ptz.cam_move(direction).await {
+            Ok(()) => {
+                tracing::info!(
+                    camera_id,
+                    ?direction,
+                    elapsed_ms = started_at.elapsed().as_millis(),
+                    "PTZ command completed"
+                );
+                Ok(())
+            }
+            Err(_) => {
+                tracing::warn!(
+                    camera_id,
+                    ?direction,
+                    elapsed_ms = started_at.elapsed().as_millis(),
+                    "PTZ command failed"
+                );
+                Err(PtzCommandError::Failed)
+            }
+        }
     }
 
     pub async fn camera_summaries(&self) -> Result<Vec<CameraSummaryDto>, StorageError> {

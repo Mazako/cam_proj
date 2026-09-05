@@ -65,6 +65,10 @@ where
         self.onvif.is_some()
     }
 
+    pub fn ptz_connection(&self) -> Option<OnvifConnection> {
+        self.onvif.clone()
+    }
+
     pub async fn run(mut self, cancel: CancellationToken) {
         loop {
             tokio::select! {

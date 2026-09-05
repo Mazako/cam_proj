@@ -6,6 +6,7 @@ mod error_404_view;
 mod error_500_view;
 mod home_view;
 mod login_view;
+mod ptz_feedback_view;
 
 use askama_web::WebTemplateExt;
 use axum::{
@@ -21,6 +22,7 @@ pub use error_404_view::Error404View;
 pub use error_500_view::Error500View;
 pub use home_view::HomeView;
 pub use login_view::LoginView;
+pub use ptz_feedback_view::PtzFeedbackView;
 
 pub fn home_page_response(csrf_token: String) -> Response {
     HomeView::new(csrf_token)
@@ -44,6 +46,26 @@ pub fn camera_details_page_response(
     CameraDetailsView::new(csrf_token, camera)
         .into_web_template()
         .into_response()
+}
+
+pub fn camera_details_page_response_with_ptz_message(
+    status: StatusCode,
+    csrf_token: String,
+    camera: crate::camera_dto::CameraDetailsDto,
+    message: impl Into<String>,
+    message_class: &'static str,
+) -> Response {
+    (
+        status,
+        CameraDetailsView::new(csrf_token, camera)
+            .with_ptz_message(message, message_class)
+            .into_web_template(),
+    )
+        .into_response()
+}
+
+pub fn ptz_feedback_response(status: StatusCode, view: PtzFeedbackView) -> Response {
+    (status, view.into_web_template()).into_response()
 }
 
 pub fn camera_form_response(status: StatusCode, view: CameraFormView) -> Response {

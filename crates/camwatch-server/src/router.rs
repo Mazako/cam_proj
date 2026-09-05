@@ -61,6 +61,10 @@ fn protected_routes() -> Router<AppState> {
             get(camera_routes::new_page).post(camera_routes::create),
         )
         .route("/cameras/{camera_id}", get(camera_routes::details))
+        .route(
+            "/cameras/{camera_id}/ptz/{direction}",
+            axum::routing::post(camera_routes::ptz),
+        )
         .route("/hls/{camera_id}/index.m3u8", get(hls_routes::playlist))
         .route("/hls/{camera_id}/{segment_name}", get(hls_routes::segment))
         .route(

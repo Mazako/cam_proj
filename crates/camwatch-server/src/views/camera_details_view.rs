@@ -19,6 +19,10 @@ pub struct CameraDetailsItemView {
     pub stream_status: &'static str,
     pub runtime_status: &'static str,
     pub ptz_status: &'static str,
+    pub ptz_available: bool,
+    pub ptz_panel_visible: bool,
+    pub ptz_message: String,
+    pub ptz_message_class: &'static str,
 }
 
 impl CameraDetailsView {
@@ -28,6 +32,17 @@ impl CameraDetailsView {
             show_logout: true,
             camera: CameraDetailsItemView::from(camera),
         }
+    }
+
+    pub fn with_ptz_message(
+        mut self,
+        message: impl Into<String>,
+        message_class: &'static str,
+    ) -> Self {
+        self.camera.ptz_message = message.into();
+        self.camera.ptz_message_class = message_class;
+        self.camera.ptz_panel_visible = true;
+        self
     }
 }
 
@@ -49,6 +64,10 @@ impl From<CameraDetailsDto> for CameraDetailsItemView {
             } else {
                 "Unavailable"
             },
+            ptz_available: camera.summary.ptz_available,
+            ptz_panel_visible: camera.summary.ptz_available,
+            ptz_message: String::new(),
+            ptz_message_class: "muted",
         }
     }
 }

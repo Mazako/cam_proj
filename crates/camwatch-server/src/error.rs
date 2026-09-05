@@ -33,6 +33,14 @@ pub enum RuntimeReloadError {
 }
 
 #[derive(Debug, Error)]
+pub enum PtzCommandError {
+    #[error("PTZ is unavailable")]
+    Unavailable,
+    #[error("PTZ command failed")]
+    Failed,
+}
+
+#[derive(Debug, Error)]
 pub enum ServerStartupError {
     #[error("authentication configuration error")]
     AuthenticationConfiguration(#[source] AuthConfigError),

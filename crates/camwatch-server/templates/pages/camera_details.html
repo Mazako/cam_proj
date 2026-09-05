@@ -44,7 +44,37 @@
                 <dd>{{ camera.ptz_status }}</dd>
             </div>
         </dl>
-        <p class="muted">PTZ controls will be added in the next panel task.</p>
+        {% if camera.ptz_panel_visible %}
+        <section id="ptz-controls" class="ptz-controls" aria-labelledby="ptz-title">
+            <p class="eyebrow">PTZ</p>
+            <h2 id="ptz-title">Camera movement</h2>
+            {% if camera.ptz_available %}
+            <div class="ptz-grid">
+                <form action="/cameras/{{ camera.id }}/ptz/up" method="post" hx-post="/cameras/{{ camera.id }}/ptz/up" hx-target="#ptz-feedback" hx-swap="outerHTML">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" aria-label="Move camera up">Up</button>
+                </form>
+                <form action="/cameras/{{ camera.id }}/ptz/left" method="post" hx-post="/cameras/{{ camera.id }}/ptz/left" hx-target="#ptz-feedback" hx-swap="outerHTML">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" aria-label="Move camera left">Left</button>
+                </form>
+                <form action="/cameras/{{ camera.id }}/ptz/right" method="post" hx-post="/cameras/{{ camera.id }}/ptz/right" hx-target="#ptz-feedback" hx-swap="outerHTML">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" aria-label="Move camera right">Right</button>
+                </form>
+                <form action="/cameras/{{ camera.id }}/ptz/down" method="post" hx-post="/cameras/{{ camera.id }}/ptz/down" hx-target="#ptz-feedback" hx-swap="outerHTML">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" aria-label="Move camera down">Down</button>
+                </form>
+            </div>
+            {% endif %}
+            {% if camera.ptz_message == "" %}
+            <p id="ptz-feedback" class="muted" role="status"></p>
+            {% else %}
+            <p id="ptz-feedback" class="{{ camera.ptz_message_class }}" role="status">{{ camera.ptz_message }}</p>
+            {% endif %}
+        </section>
+        {% endif %}
     </article>
 </section>
 
@@ -61,4 +91,5 @@
 {% block scripts %}
 <script src="/assets/hls.min.js"></script>
 <script src="/assets/hls_player.js"></script>
+<script src="/assets/htmx.min.js"></script>
 {% endblock %}
