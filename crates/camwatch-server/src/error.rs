@@ -1,6 +1,10 @@
 use std::{fmt, net::SocketAddr};
 
-use camwatch::{bucket::R2Error, config::ConfigError, storage::StorageError};
+use camwatch::{
+    bucket::R2Error,
+    config::{ConfigError, SecretError},
+    storage::StorageError,
+};
 
 use crate::auth::AuthConfigError;
 use thiserror::Error;
@@ -32,6 +36,10 @@ pub enum RuntimeReloadError {
 pub enum ServerStartupError {
     #[error("authentication configuration error")]
     AuthenticationConfiguration(#[source] AuthConfigError),
+    #[error("configuration error: {0}")]
+    Configuration(#[source] ConfigError),
+    #[error("secret configuration error")]
+    Secrets(#[source] SecretError),
     #[error("a new database requires at least one camera")]
     EmptyInitialDatabase,
     #[error("database error")]

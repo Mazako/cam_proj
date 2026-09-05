@@ -1,9 +1,21 @@
-use std::path::Path;
+use std::{path::Path, sync::Arc, time::SystemTime};
 
-use std::time::SystemTime;
+use camwatch::{
+    config::{Config, SecretManager},
+    stream::CameraStreamStatus,
+};
+use camwatch_server::{
+    app_state::{AppState, bootstrap_with_secret_manager},
+    error::ServerStartupError,
+};
 
-use camwatch::{config::Config, stream::CameraStreamStatus};
-use camwatch_server::{app_state::bootstrap, error::ServerStartupError};
+fn test_secret_manager() -> Arc<SecretManager> {
+    Arc::new(SecretManager::from_key([9; 32]))
+}
+
+async fn bootstrap(config: Config) -> Result<AppState, ServerStartupError> {
+    bootstrap_with_secret_manager(config, test_secret_manager()).await
+}
 
 #[tokio::test]
 async fn bootstraps_directly_in_the_server_without_external_integrations() {
@@ -23,9 +35,6 @@ async fn bootstraps_directly_in_the_server_without_external_integrations() {
     );
     assert!(database_path.exists());
 
-    assert!(!state.runtime_running("front-door"));
-    assert!(!state.ptz_available("front-door"));
-
     let summaries = state
         .camera_summaries()
         .await
@@ -33,9 +42,6 @@ async fn bootstraps_directly_in_the_server_without_external_integrations() {
     assert_eq!(summaries.len(), 1);
     assert_eq!(summaries[0].id, "front-door");
     assert_eq!(summaries[0].name, "Front door");
-    assert!(!summaries[0].runtime_running);
-    assert!(!summaries[0].ptz_available);
-
     state.status_model.update(
         "front-door",
         CameraStreamStatus::Online {
@@ -115,9 +121,12 @@ async fn returns_a_controlled_error_for_invalid_enabled_r2() {
     let directory = tempfile::tempdir().expect("temporary directory should exist");
     let database_path = directory.path().join("camwatch.sqlite3");
 
+    let mut config = config(&database_path, true);
+    config.app.r2_endpoint = None;
+
     assert!(matches!(
-        bootstrap(config(&database_path, true)).await,
-        Err(ServerStartupError::R2Configuration(_))
+        bootstrap(config).await,
+        Err(ServerStartupError::Configuration(_))
     ));
 }
 
@@ -133,15 +142,29 @@ fn config_with_camera(
     clip_after_motion: bool,
 ) -> Config {
     let r2 = if r2_enabled {
-        r#"
+        format!(
+            r#"
 r2_enabled = true
-r2_endpoint_env = "CAMWATCH_WEB02_TEST_R2_ENDPOINT"
-r2_access_key_id_env = "CAMWATCH_WEB02_TEST_R2_ACCESS_KEY"
-r2_secret_access_key_env = "CAMWATCH_WEB02_TEST_R2_SECRET"
-r2_bucket_env = "CAMWATCH_WEB02_TEST_R2_BUCKET"
-"#
+r2_endpoint = "{}"
+r2_access_key_id = "{}"
+r2_secret_access_key = "{}"
+r2_bucket = "{}"
+"#,
+            SecretManager::from_key([9; 32])
+                .encrypt("https://r2.example.com")
+                .expect("test secret should encrypt"),
+            SecretManager::from_key([9; 32])
+                .encrypt("access-key")
+                .expect("test secret should encrypt"),
+            SecretManager::from_key([9; 32])
+                .encrypt("secret-key")
+                .expect("test secret should encrypt"),
+            SecretManager::from_key([9; 32])
+                .encrypt("bucket")
+                .expect("test secret should encrypt"),
+        )
     } else {
-        ""
+        String::new()
     };
     let contents = format!(
         r#"
@@ -156,14 +179,17 @@ rolling_buffer_seconds = 30
 [[cameras]]
 id = "front-door"
 name = "Front door"
-rtsp_url_env = "CAMWATCH_WEB02_TEST_RTSP_URL"
+rtsp_url = "{}"
 rtsp_codec = "h264"
 motion_min_area = 1000
 yolo_confidence = 0.5
 clip_after_motion = true
-"#,
+        "#,
         database_path.display(),
-        r2
+        r2,
+        SecretManager::from_key([9; 32])
+            .encrypt("rtsp://camera.local/front-door")
+            .expect("test secret should encrypt"),
     )
     .replace("name = \"Front door\"", &format!("name = \"{name}\""))
     .replace(

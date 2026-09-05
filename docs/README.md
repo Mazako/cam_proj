@@ -11,6 +11,7 @@ Pierwsza wersja jest przeznaczona dla jednej do czterech kamer Tapo w tej samej 
 - [Backlog spec-driven](tasks.md) — kolejność implementacji, zależności i kryteria akceptacji.
 - [Specyfikacja backendu SSR](backend-ssr.md) — podział crate'ów, SSR, widoki i logowanie.
 - [Lokalna fake camera](fake-camera.md) — MediaMTX i testowy stream FFmpeg do ręcznego uruchamiania Camwatch.
+- [Szyfrowana konfiguracja](secrets.md) — format ciphertextu, klucz aplikacji i dostosowanie testów.
 
 ## Zakres MVP
 
@@ -102,7 +103,7 @@ Aplikacja jest jednym procesem Rust z modułami, a nie zbiorem mikroserwisów. K
 
 ## Konfiguracja docelowa
 
-Konfiguracja niesekretna będzie przechowywana w TOML. Sekrety będą wskazywane przez nazwy zmiennych środowiskowych i odczytywane dopiero podczas uruchamiania aplikacji.
+Konfiguracja jest przechowywana w TOML-u. Wartości pól wrażliwych są zapisane jako zaszyfrowane ciphertexty AES-256-GCM zakodowane Base64. Klucz odszyfrowujący jest dostarczany poza plikiem konfiguracyjnym przez `CAMWATCH_CONFIG_KEY`.
 
 ```toml
 [app]
@@ -111,33 +112,28 @@ pre_event_seconds = 10
 post_event_seconds = 20
 rolling_buffer_seconds = 30
 r2_enabled = false
-r2_endpoint_env = "CAMWATCH_R2_ENDPOINT"
-r2_access_key_id_env = "CAMWATCH_R2_ACCESS_KEY_ID"
-r2_secret_access_key_env = "CAMWATCH_R2_SECRET_ACCESS_KEY"
-r2_bucket_env = "CAMWATCH_R2_BUCKET"
-r2_prefix_env = "CAMWATCH_R2_PREFIX"
-r2_region_env = "CAMWATCH_R2_REGION"
+r2_endpoint = "enc:v1:aes256gcm:<base64>"
+r2_access_key_id = "enc:v1:aes256gcm:<base64>"
+r2_secret_access_key = "enc:v1:aes256gcm:<base64>"
+r2_bucket = "enc:v1:aes256gcm:<base64>"
+r2_prefix = "enc:v1:aes256gcm:<base64>"
+r2_region = "enc:v1:aes256gcm:<base64>"
 
 [[cameras]]
 id = "front-door"
 name = "Front door"
-rtsp_url_env = "CAMWATCH_FRONT_DOOR_RTSP_URL"
+rtsp_url = "enc:v1:aes256gcm:<base64>"
 rtsp_codec = "h264"
 onvif_url = "http://192.168.1.65:2020/onvif/device_service"
-onvif_credentials_env = "CAMWATCH_FRONT_DOOR_ONVIF_CREDENTIALS"
+onvif_credentials = "enc:v1:aes256gcm:<base64>"
 motion_min_area = 1000
 yolo_confidence = 0.50
 ```
 
-Nazwy zmiennych środowiskowych dla Cloudflare R2 są konfigurowane w TOML-u, natomiast ich wartości są pobierane z env. Przy `r2_enabled = false` używany jest NoOp uploader i pliki nie są wysyłane do R2.
+Przy `r2_enabled = false` używany jest NoOp uploader i pliki nie są wysyłane do R2. Wartości do zapisania w polach konfiguracyjnych można wygenerować przez `camwatch-secret`.
 
 ```text
-CAMWATCH_R2_ENDPOINT
-CAMWATCH_R2_ACCESS_KEY_ID
-CAMWATCH_R2_SECRET_ACCESS_KEY
-CAMWATCH_R2_BUCKET
-CAMWATCH_R2_PREFIX
-CAMWATCH_R2_REGION
+CAMWATCH_CONFIG_KEY
 ```
 
 ## Zasady bezpieczeństwa
@@ -148,7 +144,7 @@ CAMWATCH_R2_REGION
 - Endpointy PTZ i pliki HLS są dostępne wyłącznie po zalogowaniu.
 - Dostęp z urządzeń w LAN powinien działać przez HTTPS, najlepiej za Caddy lub innym reverse proxy.
 
-## Decyzje do podjęcia przed rozpoczęciem implementacji
+## Decyzje do podjęcia przed rozpoczęciem dalszej implementacji
 
 1. Platforma wdrożeniowa: macOS, Linux czy oba systemy.
 2. Docelowa liczba i rozdzielczość kamer.

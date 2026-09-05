@@ -1,11 +1,14 @@
-use std::{path::Path, time::Duration as StdDuration};
+use std::{path::Path, sync::Arc, time::Duration as StdDuration};
 
 use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},
 };
-use camwatch::config::Config;
-use camwatch_server::{app_state::bootstrap, router::router_with_session_expiry};
+use camwatch::config::{Config, SecretManager};
+use camwatch_server::{
+    app_state::{AppState, bootstrap_with_secret_manager},
+    router::router_with_session_expiry,
+};
 use time::Duration;
 use tower::ServiceExt;
 
@@ -212,15 +215,18 @@ async fn login_with_default_credentials(app: &axum::Router) -> String {
 
 struct TestContext {
     _directory: tempfile::TempDir,
-    state: camwatch_server::app_state::AppState,
+    state: AppState,
 }
 
 async fn test_context() -> TestContext {
     let directory = tempfile::tempdir().expect("temporary directory should exist");
     let database_path = directory.path().join("camwatch.sqlite3");
-    let state = bootstrap(config(&database_path))
-        .await
-        .expect("test server should bootstrap");
+    let state = bootstrap_with_secret_manager(
+        config(&database_path),
+        Arc::new(SecretManager::from_key([9; 32])),
+    )
+    .await
+    .expect("test server should bootstrap");
     TestContext {
         _directory: directory,
         state,
@@ -240,13 +246,16 @@ rolling_buffer_seconds = 30
 [[cameras]]
 id = "front-door"
 name = "Front door"
-rtsp_url_env = "CAMWATCH_AUTH_TEST_RTSP_URL"
+rtsp_url = "{}"
 rtsp_codec = "h264"
 motion_min_area = 1000
 yolo_confidence = 0.5
 clip_after_motion = true
 "#,
-        database_path.display()
+        database_path.display(),
+        SecretManager::from_key([9; 32])
+            .encrypt("rtsp://camera.local/front-door")
+            .expect("test secret should encrypt")
     );
     Config::parse(&contents).expect("test configuration should parse")
 }

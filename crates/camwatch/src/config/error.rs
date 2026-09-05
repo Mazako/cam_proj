@@ -1,4 +1,4 @@
-use super::{app::AppValidationError, camera::CameraValidationError};
+use super::{SecretError, app::AppValidationError, camera::CameraValidationError};
 use std::fmt;
 use thiserror::Error;
 
@@ -38,8 +38,16 @@ pub enum ConfigError {
     App(#[source] ValidationErrors<AppValidationError>),
     #[error("invalid configuration: {0}")]
     Camera(#[source] ValidationErrors<CameraValidationError>),
+    #[error("cannot decrypt configuration")]
+    Secrets(#[source] SecretError),
     #[error("invalid configuration: camera IDs must be unique")]
     DuplicateCameraIds,
+}
+
+impl From<SecretError> for ConfigError {
+    fn from(error: SecretError) -> Self {
+        Self::Secrets(error)
+    }
 }
 
 impl From<Vec<AppValidationError>> for ConfigError {

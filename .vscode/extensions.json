@@ -1,5 +1,6 @@
 {
   "recommendations": [
-    "sqlfluff.vscode-sqlfluff"
+    "sqlfluff.vscode-sqlfluff",
+    "vadimcn.vscode-lldb"
   ]
 }

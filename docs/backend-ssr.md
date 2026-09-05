@@ -172,9 +172,9 @@ CRUD kamer jest częścią docelowego panelu. Przy każdym starcie wpisy kamer o
 
 - identyfikator kamery;
 - nazwę;
-- referencję env URL-a RTSP;
+- zaszyfrowany URL RTSP obsługiwany przez backend;
 - kodek RTSP;
-- URL ONVIF oraz referencję env danych ONVIF, jako parę opcjonalną;
+- URL ONVIF oraz zaszyfrowane dane ONVIF, jako parę opcjonalną;
 - próg pola ruchu;
 - próg pewności YOLO;
 - `clip_after_motion`.
@@ -312,9 +312,9 @@ Nie wyświetlać historii eventów, archiwum klipów ani listy dawnych uploadów
 
 Formularz zawiera wszystkie pola `CameraInput`, a po zapisie zwraca użytkownika do szczegółów kamery lub listy kamer.
 
-Walidacja jest wykonywana po stronie serwera. Przy żądaniu htmx błędne pola są odświeżane jako fragment formularza; bez JavaScriptu serwer renderuje pełną stronę z błędami.
+Walidacja jest wykonywana po stronie serwera. Błędne dane powodują ponowne wyrenderowanie pełnej strony formularza z błędami.
 
-Formularz nie pokazuje wartości sekretów. Widoczne są wyłącznie referencje env, np. `CAMWATCH_FRONT_DOOR_RTSP_URL`.
+Formularz nie pokazuje zapisanych wartości sekretów. Pola sekretów są zapisywane po stronie serwera w zaszyfrowanej postaci.
 
 Usunięcie kamery wymaga osobnego formularza POST z tokenem CSRF i potwierdzeniem w UI.
 
@@ -380,7 +380,7 @@ CAMWATCH_USER_LOGIN
 CAMWATCH_USER_PASSWORD
 ```
 
-Nazwy są celowo zapisane wielkimi literami i są zgodne z istniejącą konwencją `CAMWATCH_R2_*`. Systemowe nazwy env są case-sensitive.
+Wartości sekretów są przechowywane w konfiguracji jako wersjonowane ciphertexty AES-256-GCM zakodowane Base64. Klucz `CAMWATCH_CONFIG_KEY` jest dostarczany poza plikiem konfiguracyjnym.
 
 Zasady:
 
@@ -397,7 +397,7 @@ Domyślne `admin` / `admin` jest dopuszczalne wyłącznie dlatego, że panel MVP
 
 Nie w obecnym modelu.
 
-Hasła nie zapisujemy w bazie ani pliku — jego źródłem jest env procesu. Argon2 jest potrzebny wtedy, gdy aplikacja przechowuje hash hasła i później weryfikuje podane hasło wobec tego hasha. Tutaj nie ma niczego trwałego do hashownia.
+Hasła panelu nadal pochodzą z konfiguracji środowiska i nie są częścią szyfrowanego TOML-u. Hasło nie jest zapisywane w bazie; domyślny fallback `admin/admin` pozostaje ograniczony do lokalnego developmentu.
 
 Nadal należy:
 

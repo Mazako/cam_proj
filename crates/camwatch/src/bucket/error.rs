@@ -2,10 +2,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum R2Error {
-    #[error("missing R2 environment variable reference: {0}")]
-    MissingEnvironmentVariableReference(&'static str),
-    #[error("missing R2 environment variable: {0}")]
-    MissingEnvironmentVariable(String),
+    #[error("missing R2 configuration value: {0}")]
+    MissingConfiguration(&'static str),
     #[error("invalid R2 endpoint")]
     InvalidEndpoint,
     #[error("invalid R2 configuration")]

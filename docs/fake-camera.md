@@ -11,10 +11,11 @@ docker compose up -d
 Stream jest dostępny dla aplikacji uruchomionej na hoście pod adresem:
 
 ```sh
-export CAMWATCH_FAKE_CAMERA_RTSP_URL=rtsp://127.0.0.1:8554/fake-camera
+export CAMWATCH_CONFIG_KEY="$(openssl rand -base64 32)"
+printf '%s' 'rtsp://127.0.0.1:8554/fake-camera' | cargo run -p camwatch-secret
 ```
 
-Następnie uruchom Camwatch w drugim terminalu:
+Wynik wklej jako wartość `rtsp_url` w kopii `config/camwatch.fake-camera.toml`. Następnie uruchom Camwatch w drugim terminalu:
 
 ```sh
 cargo run -p camwatch-server -- --config config/camwatch.fake-camera.toml

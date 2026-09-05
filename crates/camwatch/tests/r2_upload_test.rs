@@ -13,7 +13,13 @@ use uuid::Uuid;
 #[tokio::test]
 #[ignore = "requires a real Cloudflare R2 bucket and credentials"]
 async fn uploads_and_reads_a_clip_from_r2() {
-    let config = Config::parse(
+    let bucket = required_env("CAMWATCH_R2_BUCKET");
+    let endpoint = required_env("CAMWATCH_R2_ENDPOINT");
+    let access_key_id = required_env("CAMWATCH_R2_ACCESS_KEY_ID");
+    let secret_access_key = required_env("CAMWATCH_R2_SECRET_ACCESS_KEY");
+    let region = env::var("CAMWATCH_R2_REGION").unwrap_or_else(|_| "auto".to_owned());
+    let prefix = env::var("CAMWATCH_R2_PREFIX").unwrap_or_default();
+    let config = Config::parse(&format!(
         r#"
 [app]
 bind_address = "127.0.0.1:8080"
@@ -22,21 +28,17 @@ pre_event_seconds = 10
 post_event_seconds = 20
 rolling_buffer_seconds = 30
 r2_enabled = true
-r2_endpoint_env = "CAMWATCH_R2_ENDPOINT"
-r2_access_key_id_env = "CAMWATCH_R2_ACCESS_KEY_ID"
-r2_secret_access_key_env = "CAMWATCH_R2_SECRET_ACCESS_KEY"
-r2_bucket_env = "CAMWATCH_R2_BUCKET"
-r2_prefix_env = "CAMWATCH_R2_PREFIX"
-r2_region_env = "CAMWATCH_R2_REGION"
+ r2_endpoint = "{}"
+ r2_access_key_id = "{}"
+ r2_secret_access_key = "{}"
+ r2_bucket = "{}"
+ r2_prefix = "{}"
+ r2_region = "{}"
 "#,
-    )
+        endpoint, access_key_id, secret_access_key, bucket, prefix, region
+    ))
     .expect("R2 test configuration should be valid");
 
-    let bucket = required_env("CAMWATCH_R2_BUCKET");
-    let endpoint = required_env("CAMWATCH_R2_ENDPOINT");
-    let access_key_id = required_env("CAMWATCH_R2_ACCESS_KEY_ID");
-    let secret_access_key = required_env("CAMWATCH_R2_SECRET_ACCESS_KEY");
-    let region = env::var("CAMWATCH_R2_REGION").unwrap_or_else(|_| "auto".to_owned());
     let client = R2Client::from_app_config(&config.app).expect("R2 client should initialize");
     let verification_client = s3_client(&endpoint, &region, &access_key_id, &secret_access_key);
     let directory = tempdir().expect("temporary directory should exist");

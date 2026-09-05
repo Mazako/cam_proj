@@ -4,18 +4,18 @@ use url::Url;
 
 use crate::stream::RtspCodec;
 
-use super::{CameraId, EnvironmentVariableName, environment::is_environment_variable_name};
+use super::{CameraId, SecretError, SecretManager};
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CameraConfig {
     pub id: CameraId,
     pub name: String,
-    pub rtsp_url_env: EnvironmentVariableName,
+    pub rtsp_url: String,
     #[serde(default)]
     pub rtsp_codec: RtspCodec,
     pub onvif_url: Option<Url>,
-    pub onvif_credentials_env: Option<EnvironmentVariableName>,
+    pub onvif_credentials: Option<String>,
     pub motion_min_area: u32,
     pub yolo_confidence: f32,
     #[serde(default = "default_clip_after_motion")]
@@ -28,18 +28,18 @@ pub enum CameraValidationError {
     InvalidId,
     #[error("camera name cannot be empty")]
     EmptyName,
-    #[error("rtsp_url_env must be an environment variable name")]
-    InvalidRtspUrlEnv,
+    #[error("rtsp_url must be a valid RTSP URL")]
+    InvalidRtspUrl,
     #[error("rtsp codec must be h264 or h265")]
     InvalidRtspCodec,
     #[error("motion_min_area must be greater than zero")]
     InvalidMotionMinArea,
     #[error("yolo_confidence must be between 0 and 1")]
     InvalidYoloConfidence,
-    #[error("onvif_url and onvif_credentials_env must be set together")]
+    #[error("onvif_url and onvif_credentials must be set together")]
     IncompleteOnvif,
-    #[error("onvif_credentials_env must be an environment variable name")]
-    InvalidOnvifCredentialsEnv,
+    #[error("onvif_credentials must not be empty")]
+    InvalidOnvifCredentials,
     #[error("onvif_url must be a valid HTTP or HTTPS URL")]
     InvalidOnvifUrl,
     #[error("onvif_url must use the http or https scheme")]
@@ -51,10 +51,10 @@ pub enum CameraValidationError {
 pub struct CameraConfigParts {
     pub id: CameraId,
     pub name: String,
-    pub rtsp_url_env: EnvironmentVariableName,
+    pub rtsp_url: String,
     pub rtsp_codec: RtspCodec,
     pub onvif_url: Option<Url>,
-    pub onvif_credentials_env: Option<EnvironmentVariableName>,
+    pub onvif_credentials: Option<String>,
     pub motion_min_area: u32,
     pub yolo_confidence: f32,
     pub clip_after_motion: bool,
@@ -63,10 +63,10 @@ pub struct CameraConfigParts {
 pub struct CameraConfigInput {
     pub id: String,
     pub name: String,
-    pub rtsp_url_env: String,
+    pub rtsp_url: String,
     pub rtsp_codec: String,
     pub onvif_url: String,
-    pub onvif_credentials_env: String,
+    pub onvif_credentials: String,
     pub motion_min_area: String,
     pub yolo_confidence: String,
     pub clip_after_motion: bool,
@@ -85,11 +85,10 @@ impl CameraConfigInput {
                 None
             }
         };
-        let rtsp_url_env = match EnvironmentVariableName::parse(self.rtsp_url_env.trim().to_owned())
-        {
-            Ok(name) => Some(name),
-            Err(_) => {
-                errors.push(CameraValidationError::InvalidRtspUrlEnv);
+        let rtsp_url = match Url::parse(self.rtsp_url.trim()) {
+            Ok(url) if matches!(url.scheme(), "rtsp" | "rtsps") => Some(url.to_string()),
+            _ => {
+                errors.push(CameraValidationError::InvalidRtspUrl);
                 None
             }
         };
@@ -110,15 +109,9 @@ impl CameraConfigInput {
                 }
             },
         };
-        let onvif_credentials_env = match self.onvif_credentials_env.trim() {
+        let onvif_credentials = match self.onvif_credentials.trim() {
             "" => None,
-            value => match EnvironmentVariableName::parse(value.to_owned()) {
-                Ok(name) => Some(name),
-                Err(_) => {
-                    errors.push(CameraValidationError::InvalidOnvifCredentialsEnv);
-                    None
-                }
-            },
+            value => Some(value.to_owned()),
         };
         let motion_min_area = match self.motion_min_area.trim().parse::<u32>() {
             Ok(value) if value > 0 => Some(value),
@@ -136,17 +129,11 @@ impl CameraConfigInput {
         };
         let (
             Some(id),
-            Some(rtsp_url_env),
+            Some(rtsp_url),
             Some(rtsp_codec),
             Some(motion_min_area),
             Some(yolo_confidence),
-        ) = (
-            id,
-            rtsp_url_env,
-            rtsp_codec,
-            motion_min_area,
-            yolo_confidence,
-        )
+        ) = (id, rtsp_url, rtsp_codec, motion_min_area, yolo_confidence)
         else {
             return Err(errors);
         };
@@ -156,10 +143,10 @@ impl CameraConfigInput {
         CameraConfig::from_parts(CameraConfigParts {
             id,
             name: self.name.trim().to_owned(),
-            rtsp_url_env,
+            rtsp_url,
             rtsp_codec,
             onvif_url,
-            onvif_credentials_env,
+            onvif_credentials,
             motion_min_area,
             yolo_confidence,
             clip_after_motion: self.clip_after_motion,
@@ -172,10 +159,10 @@ impl CameraConfig {
         let camera = Self {
             id: parts.id,
             name: parts.name,
-            rtsp_url_env: parts.rtsp_url_env,
+            rtsp_url: parts.rtsp_url,
             rtsp_codec: parts.rtsp_codec,
             onvif_url: parts.onvif_url,
-            onvif_credentials_env: parts.onvif_credentials_env,
+            onvif_credentials: parts.onvif_credentials,
             motion_min_area: parts.motion_min_area,
             yolo_confidence: parts.yolo_confidence,
             clip_after_motion: parts.clip_after_motion,
@@ -192,8 +179,15 @@ impl CameraConfig {
         if let Err(name_errors) = Self::validate_name(&self.name) {
             errors.extend(name_errors);
         }
-        if !is_environment_variable_name(self.rtsp_url_env.as_str()) {
-            errors.push(CameraValidationError::InvalidRtspUrlEnv);
+        let rtsp_url = match Url::parse(&self.rtsp_url) {
+            Ok(url) if matches!(url.scheme(), "rtsp" | "rtsps") => Some(url),
+            _ => {
+                errors.push(CameraValidationError::InvalidRtspUrl);
+                None
+            }
+        };
+        if rtsp_url.is_none() {
+            return Err(errors);
         }
         if self.motion_min_area == 0 {
             errors.push(CameraValidationError::InvalidMotionMinArea);
@@ -201,13 +195,13 @@ impl CameraConfig {
         if !self.yolo_confidence.is_finite() || !(0.0..=1.0).contains(&self.yolo_confidence) {
             errors.push(CameraValidationError::InvalidYoloConfidence);
         }
-        if self.onvif_url.is_some() != self.onvif_credentials_env.is_some() {
+        if self.onvif_url.is_some() != self.onvif_credentials.is_some() {
             errors.push(CameraValidationError::IncompleteOnvif);
         }
-        if let Some(environment_variable) = &self.onvif_credentials_env
-            && !is_environment_variable_name(environment_variable.as_str())
+        if let Some(credentials) = &self.onvif_credentials
+            && credentials.trim().is_empty()
         {
-            errors.push(CameraValidationError::InvalidOnvifCredentialsEnv);
+            errors.push(CameraValidationError::InvalidOnvifCredentials);
         }
         if let Some(onvif_url) = &self.onvif_url {
             if !matches!(onvif_url.scheme(), "http" | "https") {
@@ -233,19 +227,18 @@ impl CameraConfig {
 
     pub fn from_storage(
         camera: crate::storage::Camera,
-    ) -> Result<Self, Vec<CameraValidationError>> {
+        secrets: &SecretManager,
+    ) -> Result<Self, crate::config::ConfigError> {
+        let rtsp_url = secrets.decrypt(&camera.rtsp_url)?;
+        let onvif_credentials = camera
+            .onvif_credentials
+            .map(|value| secrets.decrypt(&value))
+            .transpose()?;
         let mut errors = Vec::new();
         let id = match CameraId::parse(camera.id) {
             Ok(id) => Some(id),
             Err(_) => {
                 errors.push(CameraValidationError::InvalidId);
-                None
-            }
-        };
-        let rtsp_url_env = match EnvironmentVariableName::parse(camera.rtsp_url_env) {
-            Ok(name) => Some(name),
-            Err(_) => {
-                errors.push(CameraValidationError::InvalidRtspUrlEnv);
                 None
             }
         };
@@ -266,16 +259,6 @@ impl CameraConfig {
             },
             None => None,
         };
-        let onvif_credentials_env = match camera.onvif_credentials_env {
-            Some(value) => match EnvironmentVariableName::parse(value) {
-                Ok(name) => Some(name),
-                Err(_) => {
-                    errors.push(CameraValidationError::InvalidOnvifCredentialsEnv);
-                    None
-                }
-            },
-            None => None,
-        };
         let motion_min_area = match camera.motion_min_area.try_into() {
             Ok(value) => Some(value),
             Err(_) => {
@@ -284,43 +267,56 @@ impl CameraConfig {
             }
         };
         let yolo_confidence = camera.yolo_confidence as f32;
-        let (Some(id), Some(rtsp_url_env), Some(rtsp_codec), Some(motion_min_area)) =
-            (id, rtsp_url_env, rtsp_codec, motion_min_area)
+        let (Some(id), Some(rtsp_codec), Some(motion_min_area)) = (id, rtsp_codec, motion_min_area)
         else {
-            return Err(errors);
+            return Err(errors.into());
         };
         if !errors.is_empty() {
-            return Err(errors);
+            return Err(errors.into());
         }
         Self::from_parts(CameraConfigParts {
             id,
             name: camera.name,
-            rtsp_url_env,
+            rtsp_url,
             rtsp_codec,
             onvif_url,
-            onvif_credentials_env,
+            onvif_credentials,
             motion_min_area,
             yolo_confidence,
             clip_after_motion: camera.clip_after_motion,
         })
+        .map_err(Into::into)
     }
-}
 
-impl From<CameraConfig> for crate::storage::NewCamera {
-    fn from(camera: CameraConfig) -> Self {
-        Self {
-            id: camera.id.as_str().to_owned(),
-            name: camera.name,
-            rtsp_url_env: camera.rtsp_url_env.as_str().to_owned(),
-            rtsp_codec: camera.rtsp_codec.as_str().to_owned(),
-            onvif_url: camera.onvif_url.map(|url| url.to_string()),
-            onvif_credentials_env: camera
-                .onvif_credentials_env
-                .map(|name| name.as_str().to_owned()),
-            motion_min_area: i64::from(camera.motion_min_area),
-            yolo_confidence: f64::from(camera.yolo_confidence),
-            clip_after_motion: camera.clip_after_motion,
-        }
+    pub fn decrypt_secrets(&mut self, secrets: &SecretManager) -> Result<(), SecretError> {
+        self.rtsp_url = secrets.decrypt(&self.rtsp_url)?;
+        self.onvif_credentials = self
+            .onvif_credentials
+            .take()
+            .map(|value| secrets.decrypt(&value))
+            .transpose()?;
+        Ok(())
+    }
+
+    pub fn to_storage(
+        &self,
+        secrets: &SecretManager,
+    ) -> Result<crate::storage::NewCamera, SecretError> {
+        Ok(crate::storage::NewCamera {
+            id: self.id.as_str().to_owned(),
+            name: self.name.clone(),
+            rtsp_url: secrets.encrypt(&self.rtsp_url)?,
+            rtsp_codec: self.rtsp_codec.as_str().to_owned(),
+            onvif_url: self.onvif_url.as_ref().map(ToString::to_string),
+            onvif_credentials: self
+                .onvif_credentials
+                .as_ref()
+                .map(|value| secrets.encrypt(value))
+                .transpose()?,
+            motion_min_area: i64::from(self.motion_min_area),
+            yolo_confidence: f64::from(self.yolo_confidence),
+            clip_after_motion: self.clip_after_motion,
+        })
     }
 }
 

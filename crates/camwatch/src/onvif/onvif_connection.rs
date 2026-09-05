@@ -1,4 +1,4 @@
-use std::{env, time::Duration};
+use std::time::Duration;
 
 use oxvif::{OnvifError, OnvifSession};
 
@@ -16,9 +16,7 @@ impl OnvifConnection {
     pub async fn try_build(camera_config: &CameraConfig) -> Option<OnvifConnection> {
         let onvif_url = camera_config.onvif_url.as_ref()?.as_str();
         let mut builder = OnvifSession::builder(onvif_url);
-        if let Some(environ) = &camera_config.onvif_credentials_env
-            && let Ok(credentials) = env::var(environ.as_str())
-        {
+        if let Some(credentials) = &camera_config.onvif_credentials {
             let mut split = credentials.splitn(2, ':');
             let username = split.next().unwrap_or_default();
             let password = split.next().unwrap_or_default();

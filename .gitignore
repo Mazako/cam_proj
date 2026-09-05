@@ -22,3 +22,5 @@ data/
 *.pfx
 id_rsa
 id_ed25519
+config/camwatch-local.toml
+.env

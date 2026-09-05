@@ -2,7 +2,7 @@ use std::{fs, path::Path};
 
 use serde::Deserialize;
 
-use super::{AppConfig, CameraConfig, ConfigError};
+use super::{AppConfig, CameraConfig, ConfigError, SecretManager};
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -22,9 +22,16 @@ impl Config {
     }
 
     pub fn parse(contents: &str) -> Result<Self, ConfigError> {
-        let config = toml::from_str::<Self>(contents).map_err(|_| ConfigError::InvalidToml)?;
-        config.validate()?;
-        Ok(config)
+        toml::from_str::<Self>(contents).map_err(|_| ConfigError::InvalidToml)
+    }
+
+    pub fn decrypt_secrets(mut self, secrets: &SecretManager) -> Result<Self, ConfigError> {
+        self.app.decrypt_secrets(secrets)?;
+        for camera in &mut self.cameras {
+            camera.decrypt_secrets(secrets)?;
+        }
+        self.validate()?;
+        Ok(self)
     }
 
     fn validate(&self) -> Result<(), ConfigError> {

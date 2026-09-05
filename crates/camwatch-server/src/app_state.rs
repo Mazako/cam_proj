@@ -3,7 +3,7 @@ use std::sync::Arc;
 use camwatch::{
     bucket::{BucketUploader, NoOpBucketUploader, R2Client},
     clips::{ClipManager, create_clip_uploader_worker, create_clip_worker, create_retainer_worker},
-    config::{AppConfig, CameraConfig, Config},
+    config::{AppConfig, CameraConfig, Config, SecretManager},
     runtime::CameraRuntime,
     storage::{Camera, Database, NewCamera, StorageError},
     stream::{CameraStatusModel, GstreamerCameraStream, SegmentRecordingConfig},
@@ -24,6 +24,7 @@ pub struct AppState {
     pub status_model: Arc<CameraStatusModel>,
     pub camera_runtimes: Arc<DashMap<String, RuntimeTask>>,
     pub runtime_config: Arc<AppConfig>,
+    pub secret_manager: Arc<SecretManager>,
 }
 
 impl AppState {
@@ -34,6 +35,7 @@ impl AppState {
         status_model: Arc<CameraStatusModel>,
         camera_runtimes: Arc<DashMap<String, RuntimeTask>>,
         runtime_config: Arc<AppConfig>,
+        secret_manager: Arc<SecretManager>,
     ) -> Self {
         Self {
             auth,
@@ -42,6 +44,7 @@ impl AppState {
             status_model,
             camera_runtimes,
             runtime_config,
+            secret_manager,
         }
     }
 
@@ -82,10 +85,10 @@ impl AppState {
         Ok(Some(CameraDetailsDto {
             summary,
             enabled: camera.enabled,
-            rtsp_url_env: camera.rtsp_url_env,
+            rtsp_url: camera.rtsp_url,
             rtsp_codec: camera.rtsp_codec,
             onvif_url: camera.onvif_url,
-            onvif_credentials_env: camera.onvif_credentials_env,
+            onvif_credentials: camera.onvif_credentials,
             motion_min_area: camera.motion_min_area,
             yolo_confidence: camera.yolo_confidence,
             clip_after_motion: camera.clip_after_motion,
@@ -113,20 +116,17 @@ impl AppState {
 
     pub async fn replace_camera_runtime(&self, camera: Camera) -> Result<(), RuntimeReloadError> {
         let camera_id = camera.id.clone();
-        let camera = CameraConfig::from_storage(camera)
-            .map_err(|errors| RuntimeReloadError::InvalidConfiguration(errors.into()))?;
+        let camera = CameraConfig::from_storage(camera, &self.secret_manager)
+            .map_err(RuntimeReloadError::InvalidConfiguration)?;
         let recording = SegmentRecordingConfig::new(
             self.runtime_config
                 .segment_directory
                 .join(camera_id.as_str()),
             Duration::from_secs(u64::from(self.runtime_config.segment_rotation_seconds)),
         );
-        let stream = GstreamerCameraStream::from_environment(
-            camera.rtsp_url_env.as_str(),
-            camera.rtsp_codec,
-            recording,
-        )
-        .map_err(|_| RuntimeReloadError::StreamUnavailable)?;
+        let stream =
+            GstreamerCameraStream::new(camera.rtsp_url.clone(), camera.rtsp_codec, recording)
+                .map_err(|_| RuntimeReloadError::StreamUnavailable)?;
         let runtime = CameraRuntime::new(
             camera,
             &self.runtime_config,
@@ -155,6 +155,18 @@ impl AppState {
 }
 
 pub async fn bootstrap(config: Config) -> Result<AppState, ServerStartupError> {
+    let secret_manager =
+        Arc::new(SecretManager::from_environment().map_err(ServerStartupError::Secrets)?);
+    bootstrap_with_secret_manager(config, secret_manager).await
+}
+
+pub async fn bootstrap_with_secret_manager(
+    config: Config,
+    secret_manager: Arc<SecretManager>,
+) -> Result<AppState, ServerStartupError> {
+    let config = config
+        .decrypt_secrets(&secret_manager)
+        .map_err(ServerStartupError::Configuration)?;
     let Config { app, cameras } = config;
     let auth = Arc::new(
         AuthService::from_environment().map_err(ServerStartupError::AuthenticationConfiguration)?,
@@ -168,7 +180,11 @@ pub async fn bootstrap(config: Config) -> Result<AppState, ServerStartupError> {
         .map_err(ServerStartupError::Database)?;
 
     if !cameras.is_empty() {
-        let new_cameras = cameras.iter().map(new_camera).collect::<Vec<_>>();
+        let new_cameras = cameras
+            .iter()
+            .map(|camera| new_camera(camera, &secret_manager))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(ServerStartupError::Secrets)?;
         database
             .upsert_cameras(&new_cameras)
             .await
@@ -212,10 +228,10 @@ pub async fn bootstrap(config: Config) -> Result<AppState, ServerStartupError> {
         .map_err(ServerStartupError::Database)?
     {
         let camera_id = camera.id.clone();
-        let camera = CameraConfig::from_storage(camera).map_err(|source| {
+        let camera = CameraConfig::from_storage(camera, &secret_manager).map_err(|source| {
             ServerStartupError::StoredCameraConfiguration {
                 camera_id: camera_id.clone(),
-                source: source.into(),
+                source,
             }
         })?;
         let camera_id = camera.id.as_str().to_owned();
@@ -223,11 +239,7 @@ pub async fn bootstrap(config: Config) -> Result<AppState, ServerStartupError> {
             app.segment_directory.join(camera_id.as_str()),
             Duration::from_secs(u64::from(app.segment_rotation_seconds)),
         );
-        match GstreamerCameraStream::from_environment(
-            camera.rtsp_url_env.as_str(),
-            camera.rtsp_codec,
-            recording,
-        ) {
+        match GstreamerCameraStream::new(camera.rtsp_url.clone(), camera.rtsp_codec, recording) {
             Ok(stream) => {
                 let runtime = CameraRuntime::new(
                     camera,
@@ -257,22 +269,13 @@ pub async fn bootstrap(config: Config) -> Result<AppState, ServerStartupError> {
         status_model,
         camera_runtimes,
         Arc::new(app),
+        secret_manager,
     ))
 }
 
-fn new_camera(camera: &CameraConfig) -> NewCamera {
-    NewCamera {
-        id: camera.id.as_str().to_owned(),
-        name: camera.name.clone(),
-        rtsp_url_env: camera.rtsp_url_env.as_str().to_owned(),
-        rtsp_codec: camera.rtsp_codec.as_str().to_owned(),
-        onvif_url: camera.onvif_url.as_ref().map(ToString::to_string),
-        onvif_credentials_env: camera
-            .onvif_credentials_env
-            .as_ref()
-            .map(|environment_variable| environment_variable.as_str().to_owned()),
-        motion_min_area: i64::from(camera.motion_min_area),
-        yolo_confidence: f64::from(camera.yolo_confidence),
-        clip_after_motion: camera.clip_after_motion,
-    }
+fn new_camera(
+    camera: &CameraConfig,
+    secret_manager: &SecretManager,
+) -> Result<NewCamera, camwatch::config::SecretError> {
+    camera.to_storage(secret_manager)
 }

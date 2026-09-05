@@ -166,10 +166,10 @@ async fn database_with_camera() -> (TempDir, Database) {
         .upsert_cameras(&[NewCamera {
             id: CAMERA_ID.to_owned(),
             name: "Front door".to_owned(),
-            rtsp_url_env: "CAMWATCH_FRONT_DOOR_RTSP_URL".to_owned(),
+            rtsp_url: "CAMWATCH_FRONT_DOOR_RTSP_URL".to_owned(),
             rtsp_codec: "h264".to_owned(),
             onvif_url: None,
-            onvif_credentials_env: None,
+            onvif_credentials: None,
             motion_min_area: 1_000,
             yolo_confidence: 0.5,
             clip_after_motion: true,

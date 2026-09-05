@@ -51,7 +51,7 @@ pub(crate) async fn create(
         Ok(token) => token,
         Err(_) => return views::internal_error_response(),
     };
-    let new_camera = match input.validate() {
+    let camera = match input.validate() {
         Ok(camera) => camera,
         Err(errors) => {
             return camera_form_error_response(
@@ -65,7 +65,14 @@ pub(crate) async fn create(
             );
         }
     };
-    let camera_id = new_camera.id.clone();
+    let camera_id = camera.id.as_str().to_owned();
+    let new_camera = match camera.to_storage(&state.secret_manager) {
+        Ok(camera) => camera,
+        Err(error) => {
+            tracing::error!(camera_id, %error, "failed to encrypt camera configuration");
+            return views::internal_error_response();
+        }
+    };
 
     match state.database.get_camera(&camera_id).await {
         Ok(Some(camera)) if camera.deleted_at.is_none() && camera.enabled => {
@@ -129,7 +136,7 @@ pub(crate) async fn update(
     State(state): State<AppState>,
     Path(camera_id): Path<String>,
     session: Session,
-    Form(input): Form<CameraInput>,
+    Form(mut input): Form<CameraInput>,
 ) -> Response {
     if !auth_routes::valid_csrf(&session, &input.csrf_token).await {
         return views::forbidden_response();
@@ -139,6 +146,28 @@ pub(crate) async fn update(
         Ok(token) => token,
         Err(_) => return views::internal_error_response(),
     };
+    let stored_camera = match state.database.get_camera(&camera_id).await {
+        Ok(Some(camera)) if camera.enabled && camera.deleted_at.is_none() => camera,
+        Ok(_) => return views::not_found_response(),
+        Err(_) => {
+            tracing::error!(camera_id, "failed to check camera before editing");
+            return views::internal_error_response();
+        }
+    };
+    let stored_config =
+        match camwatch::config::CameraConfig::from_storage(stored_camera, &state.secret_manager) {
+            Ok(camera) => camera,
+            Err(error) => {
+                tracing::error!(camera_id, %error, "failed to decrypt camera before editing");
+                return views::internal_error_response();
+            }
+        };
+    if input.rtsp_url.trim().is_empty() {
+        input.rtsp_url = stored_config.rtsp_url.clone();
+    }
+    if !input.onvif_url.trim().is_empty() && input.onvif_credentials.trim().is_empty() {
+        input.onvif_credentials = stored_config.onvif_credentials.clone().unwrap_or_default();
+    }
     let action = format!("/cameras/{camera_id}/edit");
     let mut errors = Vec::new();
     if input.id != camera_id {
@@ -163,15 +192,14 @@ pub(crate) async fn update(
         );
     }
     let new_camera = new_camera.expect("valid camera input should be present");
-
-    match state.camera_details(&camera_id).await {
-        Ok(Some(_)) => {}
-        Ok(None) => return views::not_found_response(),
-        Err(_) => {
-            tracing::error!(camera_id, "failed to check camera before editing");
+    let new_camera = match new_camera.to_storage(&state.secret_manager) {
+        Ok(camera) => camera,
+        Err(error) => {
+            tracing::error!(camera_id, %error, "failed to encrypt camera configuration");
             return views::internal_error_response();
         }
-    }
+    };
+
     if let Err(error) = state.database.upsert_camera(&new_camera).await {
         tracing::error!(camera_id, %error, "failed to update camera");
         return views::internal_error_response();

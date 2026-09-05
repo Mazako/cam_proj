@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/camwatch", "crates/camwatch-server"]
+members = ["crates/camwatch", "crates/camwatch-server", "crates/camwatch-secret"]
 resolver = "3"
 
 [workspace.package]
@@ -8,12 +8,14 @@ license = "MIT"
 rust-version = "1.98"
 
 [workspace.dependencies]
+aes-gcm = "0.10"
 aws-config = "1"
 aws-sdk-s3 = "1"
 askama = "0.16"
 askama_web = { version = "0.16", features = ["axum-0.8"] }
 axum = "0.8"
 backon = "1.6"
+base64 = "0.22"
 clap = { version = "4.5", features = ["derive"] }
 dashmap = "6.2.1"
 gstreamer = "0.24"

@@ -157,6 +157,7 @@ fn assemble_clip(segments: Vec<Segment>, output_path: PathBuf) -> Result<Clip, C
 }
 
 fn clip_duration(path: &Path) -> Result<Duration, ClipStoreError> {
+    let path = fs::canonicalize(path).map_err(|_| ClipStoreError::ClipMetadata)?;
     let uri = Url::from_file_path(path).map_err(|_| ClipStoreError::InvalidPath)?;
     let discoverer = gst_pbutils::Discoverer::new(gst::ClockTime::from_seconds(5))
         .map_err(|_| ClipStoreError::ClipMetadata)?;

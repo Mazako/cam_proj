@@ -31,7 +31,7 @@ rolling_buffer_seconds = 30
 [[cameras]]
 id = "front-door"
 name = "Front door"
-rtsp_url_env = "CAMWATCH_FRONT_DOOR_RTSP_URL"
+rtsp_url = "rtsp://127.0.0.1:8554/front-door"
 motion_min_area = 1000
 yolo_confidence = 0.5
 "#,
@@ -62,9 +62,9 @@ rolling_buffer_seconds = 30
 [[cameras]]
 id = "front-door"
 name = "Front door"
-rtsp_url_env = "CAMWATCH_FRONT_DOOR_RTSP_URL"
+rtsp_url = "rtsp://127.0.0.1:8554/front-door"
 onvif_url = "{onvif_url}"
-onvif_credentials_env = "CAMWATCH_FRONT_DOOR_ONVIF_CREDENTIALS"
+onvif_credentials = "user:password"
 motion_min_area = 1000
 yolo_confidence = 0.5
 "#

@@ -1,0 +1,14 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Camwatch: local",
+      "type": "shell",
+      "command": "set -a && . \"${workspaceFolder}/.env\" && set +a && cargo run -p camwatch-server -- --config \"${workspaceFolder}/config/camwatch-local.toml\"",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

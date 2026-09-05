@@ -130,10 +130,10 @@ async fn queues_clip_with_pre_and_post_window() {
         .upsert_cameras(&[NewCamera {
             id: "front-door".to_owned(),
             name: "Front door".to_owned(),
-            rtsp_url_env: "CAMWATCH_FRONT_DOOR_RTSP_URL".to_owned(),
+            rtsp_url: "CAMWATCH_FRONT_DOOR_RTSP_URL".to_owned(),
             rtsp_codec: "h264".to_owned(),
             onvif_url: None,
-            onvif_credentials_env: None,
+            onvif_credentials: None,
             motion_min_area: 1000,
             yolo_confidence: 0.5,
             clip_after_motion: true,
@@ -230,7 +230,7 @@ rolling_buffer_seconds = 30
 [[cameras]]
 id = "front-door"
 name = "Front door"
-rtsp_url_env = "CAMWATCH_FRONT_DOOR_RTSP_URL"
+rtsp_url = "rtsp://127.0.0.1:8554/front-door"
 motion_min_area = 1000
 yolo_confidence = 0.5
 "#,

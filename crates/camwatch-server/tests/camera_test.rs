@@ -1,11 +1,17 @@
-use std::{path::Path, time::SystemTime};
+use std::{path::Path, sync::Arc, time::SystemTime};
 
 use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},
 };
-use camwatch::{config::Config, stream::CameraStreamStatus};
-use camwatch_server::{app_state::bootstrap, router::router_with_session_expiry};
+use camwatch::{
+    config::{Config, SecretManager},
+    stream::CameraStreamStatus,
+};
+use camwatch_server::{
+    app_state::{AppState, bootstrap_with_secret_manager},
+    router::router_with_session_expiry,
+};
 use time::Duration;
 use tower::ServiceExt;
 
@@ -86,7 +92,7 @@ async fn camera_can_be_created_and_saved_when_runtime_is_unavailable() {
             "/cameras/new",
             &cookie,
             &format!(
-                "csrf_token={token}&id=back-yard&name=Back%20yard&rtsp_url_env=CAMWATCH_BACK_YARD_RTSP_URL&rtsp_codec=h264&motion_min_area=1000&yolo_confidence=0.5&clip_after_motion=on"
+                "csrf_token={token}&id=back-yard&name=Back%20yard&rtsp_url=rtsp://camera.local/back-yard&rtsp_codec=h264&motion_min_area=1000&yolo_confidence=0.5&clip_after_motion=on"
             ),
         ))
         .await
@@ -101,7 +107,11 @@ async fn camera_can_be_created_and_saved_when_runtime_is_unavailable() {
         .expect("created camera should load")
         .expect("created camera should exist");
     assert_eq!(camera.name, "Back yard");
-    assert!(!state.runtime_running("back-yard"));
+    assert!(camera.rtsp_url.starts_with("enc:v1:aes256gcm:"));
+    assert_eq!(
+        state.secret_manager.decrypt(&camera.rtsp_url).unwrap(),
+        "rtsp://camera.local/back-yard"
+    );
 }
 
 #[tokio::test]
@@ -122,7 +132,7 @@ async fn camera_can_be_edited_without_reloading_other_runtime_state() {
             "/cameras/front-door/edit",
             &cookie,
             &format!(
-                "csrf_token={token}&id=front-door&name=Updated%20front%20door&rtsp_url_env=CAMWATCH_FRONT_DOOR_RTSP_URL&rtsp_codec=h265&motion_min_area=2000&yolo_confidence=0.7"
+                "csrf_token={token}&id=front-door&name=Updated%20front%20door&rtsp_url=&rtsp_codec=h265&motion_min_area=2000&yolo_confidence=0.7"
             ),
         ))
         .await
@@ -140,6 +150,10 @@ async fn camera_can_be_edited_without_reloading_other_runtime_state() {
     assert_eq!(camera.motion_min_area, 2000);
     assert!((camera.yolo_confidence - 0.7).abs() < f64::from(f32::EPSILON));
     assert!(!camera.clip_after_motion);
+    assert_eq!(
+        state.secret_manager.decrypt(&camera.rtsp_url).unwrap(),
+        "rtsp://camera.local/front-door"
+    );
 }
 
 #[tokio::test]
@@ -160,7 +174,7 @@ async fn invalid_camera_input_renders_errors_without_saving() {
             "/cameras/new",
             &cookie,
             &format!(
-                "csrf_token={token}&id=Bad%20ID&name=&rtsp_url_env=rtsp://secret&rtsp_codec=h264&motion_min_area=0&yolo_confidence=2"
+                "csrf_token={token}&id=Bad%20ID&name=&rtsp_url=http://secret&rtsp_codec=h264&motion_min_area=0&yolo_confidence=2"
             ),
         ))
         .await
@@ -170,7 +184,7 @@ async fn invalid_camera_input_renders_errors_without_saving() {
     let body = response_body(response).await;
     assert!(body.contains("camera ID may contain only lowercase letters"));
     assert!(body.contains("camera name cannot be empty"));
-    assert!(body.contains("rtsp_url_env must be an environment variable name"));
+    assert!(body.contains("rtsp_url must be a valid RTSP URL"));
     assert_eq!(state.database.camera_count().await.unwrap(), 1);
 }
 
@@ -212,15 +226,18 @@ async fn camera_delete_soft_deletes_record_and_stops_runtime() {
 
 struct TestContext {
     _directory: tempfile::TempDir,
-    state: camwatch_server::app_state::AppState,
+    state: AppState,
 }
 
 async fn test_context() -> TestContext {
     let directory = tempfile::tempdir().expect("temporary directory should exist");
     let database_path = directory.path().join("camwatch.sqlite3");
-    let state = bootstrap(config(&database_path))
-        .await
-        .expect("test server should bootstrap");
+    let state = bootstrap_with_secret_manager(
+        config(&database_path),
+        Arc::new(SecretManager::from_key([9; 32])),
+    )
+    .await
+    .expect("test server should bootstrap");
     TestContext {
         _directory: directory,
         state,
@@ -240,13 +257,16 @@ rolling_buffer_seconds = 30
 [[cameras]]
 id = "front-door"
 name = "Front door"
-rtsp_url_env = "CAMWATCH_CAMERA_TEST_RTSP_URL"
+rtsp_url = "{}"
 rtsp_codec = "h264"
 motion_min_area = 1000
 yolo_confidence = 0.5
 clip_after_motion = true
 "#,
-        database_path.display()
+        database_path.display(),
+        SecretManager::from_key([9; 32])
+            .encrypt("rtsp://camera.local/front-door")
+            .expect("test secret should encrypt")
     );
     Config::parse(&contents).expect("test configuration should parse")
 }

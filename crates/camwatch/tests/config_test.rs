@@ -1,6 +1,31 @@
-use camwatch::{config::Config, stream::RtspCodec};
+use camwatch::{
+    config::{Config, SecretManager},
+    stream::RtspCodec,
+};
 
-const VALID_CONFIG: &str = r#"
+const TEST_KEY: [u8; 32] = [9; 32];
+
+fn secret(value: &str) -> String {
+    SecretManager::from_key(TEST_KEY)
+        .encrypt(value)
+        .expect("test secret should encrypt")
+}
+
+fn valid_config() -> String {
+    config_with_values(
+        "rtsp://camera.local/live",
+        Some("user:password"),
+        "http://192.168.1.65:2020/onvif/device_service",
+    )
+}
+
+fn config_with_values(rtsp_url: &str, credentials: Option<&str>, onvif_url: &str) -> String {
+    let credentials = credentials
+        .map(secret)
+        .map(|value| format!("onvif_credentials = \"{value}\"\n"))
+        .unwrap_or_default();
+    format!(
+        r#"
 [app]
 bind_address = "127.0.0.1:8080"
 database_path = "data/camwatch.sqlite3"
@@ -11,18 +36,29 @@ rolling_buffer_seconds = 30
 [[cameras]]
 id = "front-door"
 name = "Front door"
-rtsp_url_env = "CAMWATCH_FRONT_DOOR_RTSP_URL"
+rtsp_url = "{}"
 rtsp_codec = "h265"
-onvif_url = "http://192.168.1.65:2020/onvif/device_service"
-onvif_credentials_env = "CAMWATCH_FRONT_DOOR_ONVIF_CREDENTIALS"
-motion_min_area = 1000
+onvif_url = "{}"
+{}motion_min_area = 1000
 yolo_confidence = 0.5
 clip_after_motion = false
-"#;
+"#,
+        secret(rtsp_url),
+        onvif_url,
+        credentials,
+    )
+}
+
+fn parse_config(contents: &str) -> Config {
+    Config::parse(contents)
+        .expect("configuration should parse")
+        .decrypt_secrets(&SecretManager::from_key(TEST_KEY))
+        .expect("configuration secrets should decrypt")
+}
 
 #[test]
 fn parses_a_configuration_with_a_camera() {
-    let config = Config::parse(VALID_CONFIG).expect("valid configuration should load");
+    let config = parse_config(&valid_config());
 
     assert_eq!(config.cameras.len(), 1);
     assert_eq!(config.cameras[0].rtsp_codec, RtspCodec::H265);
@@ -39,20 +75,32 @@ fn parses_a_configuration_with_a_camera() {
 
 #[test]
 fn defaults_camera_codec_to_h264() {
-    let input = VALID_CONFIG.replace("rtsp_codec = \"h265\"\n", "");
+    let input = valid_config().replace("rtsp_codec = \"h265\"\n", "");
 
-    let config = Config::parse(&input).expect("configuration should default to H.264");
+    let config = parse_config(&input);
 
     assert_eq!(config.cameras[0].rtsp_codec, RtspCodec::H264);
 }
 
 #[test]
 fn defaults_clip_after_motion_to_true() {
-    let input = VALID_CONFIG.replace("clip_after_motion = false\n", "");
+    let input = valid_config().replace("clip_after_motion = false\n", "");
 
-    let config = Config::parse(&input).expect("configuration should load");
+    let config = parse_config(&input);
 
     assert!(config.cameras[0].clip_after_motion);
+}
+
+#[test]
+fn does_not_read_r2_secrets_when_r2_is_disabled() {
+    let input = valid_config().replace(
+        "rolling_buffer_seconds = 30",
+        "rolling_buffer_seconds = 30\nr2_endpoint = \"not-a-ciphertext\"",
+    );
+
+    let config = parse_config(&input);
+
+    assert_eq!(config.app.r2_endpoint.as_deref(), Some("not-a-ciphertext"));
 }
 
 #[test]
@@ -73,41 +121,52 @@ rolling_buffer_seconds = 30
 }
 
 #[test]
-fn rejects_an_invalid_environment_variable_name_without_disclosing_it() {
-    let input = VALID_CONFIG.replace(
-        "CAMWATCH_FRONT_DOOR_RTSP_URL",
-        "rtsp://user:super-secret-rtsp-url@camera.local/live",
+fn rejects_an_invalid_rtsp_url_without_disclosing_it() {
+    let input = config_with_values(
+        "http://user:super-secret-rtsp-url@camera.local/live",
+        Some("user:password"),
+        "http://192.168.1.65:2020/onvif/device_service",
     );
 
-    let error =
-        Config::parse(&input).expect_err("a secret value cannot be an environment variable name");
+    let error = Config::parse(&input)
+        .expect("configuration should parse")
+        .decrypt_secrets(&SecretManager::from_key(TEST_KEY))
+        .expect_err("HTTP is not a valid RTSP URL");
 
     assert!(!error.to_string().contains("super-secret-rtsp-url"));
 }
 
 #[test]
 fn rejects_incomplete_onvif_configuration() {
-    let input = VALID_CONFIG.replace(
-        "onvif_credentials_env = \"CAMWATCH_FRONT_DOOR_ONVIF_CREDENTIALS\"\n",
-        "",
+    let input = config_with_values(
+        "rtsp://camera.local/live",
+        None,
+        "http://192.168.1.65:2020/onvif/device_service",
     );
 
-    let error = Config::parse(&input).expect_err("ONVIF requires both fields");
+    let error = Config::parse(&input)
+        .expect("configuration should parse")
+        .decrypt_secrets(&SecretManager::from_key(TEST_KEY))
+        .expect_err("ONVIF requires both fields");
 
     assert_eq!(
         error.to_string(),
-        "invalid configuration: onvif_url and onvif_credentials_env must be set together"
+        "invalid configuration: onvif_url and onvif_credentials must be set together"
     );
 }
 
 #[test]
 fn rejects_onvif_url_with_credentials() {
-    let input = VALID_CONFIG.replace(
-        "http://192.168.1.65:2020/onvif/device_service",
+    let input = config_with_values(
+        "rtsp://camera.local/live",
+        Some("user:password"),
         "http://user:password@192.168.1.65:2020/onvif/device_service",
     );
 
-    let error = Config::parse(&input).expect_err("ONVIF URL must not contain credentials");
+    let error = Config::parse(&input)
+        .expect("configuration should parse")
+        .decrypt_secrets(&SecretManager::from_key(TEST_KEY))
+        .expect_err("ONVIF URL must not contain credentials");
 
     assert_eq!(
         error.to_string(),
@@ -117,12 +176,15 @@ fn rejects_onvif_url_with_credentials() {
 
 #[test]
 fn rejects_a_segment_rotation_longer_than_the_rolling_buffer() {
-    let input = VALID_CONFIG.replace(
+    let input = valid_config().replace(
         "rolling_buffer_seconds = 30",
         "rolling_buffer_seconds = 10\nsegment_rotation_seconds = 11",
     );
 
-    let error = Config::parse(&input).expect_err("rotation cannot exceed the rolling buffer");
+    let error = Config::parse(&input)
+        .expect("configuration should parse")
+        .decrypt_secrets(&SecretManager::from_key(TEST_KEY))
+        .expect_err("rotation cannot exceed the rolling buffer");
 
     assert_eq!(
         error.to_string(),
@@ -131,46 +193,52 @@ fn rejects_a_segment_rotation_longer_than_the_rolling_buffer() {
 }
 
 #[test]
-fn parses_r2_environment_variable_references_when_enabled() {
-    let input = VALID_CONFIG.replace(
+fn parses_encrypted_r2_values_when_enabled() {
+    let input = valid_config().replace(
         "rolling_buffer_seconds = 30",
-        concat!(
-            "rolling_buffer_seconds = 30\n",
-            "r2_enabled = true\n",
-            "r2_endpoint_env = \"CAMWATCH_R2_ENDPOINT\"\n",
-            "r2_access_key_id_env = \"CAMWATCH_R2_ACCESS_KEY_ID\"\n",
-            "r2_secret_access_key_env = \"CAMWATCH_R2_SECRET_ACCESS_KEY\"\n",
-            "r2_bucket_env = \"CAMWATCH_R2_BUCKET\"\n",
-            "r2_prefix_env = \"CAMWATCH_R2_PREFIX\"\n",
-            "r2_region_env = \"CAMWATCH_R2_REGION\"\n",
+        &format!(
+            "rolling_buffer_seconds = 30\n\
+r2_enabled = true\n\
+r2_endpoint = \"{}\"\n\
+r2_access_key_id = \"{}\"\n\
+r2_secret_access_key = \"{}\"\n\
+r2_bucket = \"{}\"\n\
+r2_prefix = \"{}\"\n\
+r2_region = \"{}\"\n",
+            secret("https://r2.example.com"),
+            secret("access-key"),
+            secret("secret-key"),
+            secret("bucket"),
+            secret("clips"),
+            secret("auto"),
         ),
     );
 
-    let config = Config::parse(&input).expect("R2 configuration should load");
+    let config = parse_config(&input);
 
     assert!(config.app.r2_enabled);
     assert_eq!(
-        config.app.r2_endpoint_env.as_ref().unwrap().as_str(),
-        "CAMWATCH_R2_ENDPOINT"
+        config.app.r2_endpoint.as_ref().unwrap(),
+        "https://r2.example.com"
     );
-    assert_eq!(
-        config.app.r2_region_env.as_ref().unwrap().as_str(),
-        "CAMWATCH_R2_REGION"
-    );
+    assert_eq!(config.app.r2_region.as_ref().unwrap(), "auto");
 }
 
 #[test]
-fn rejects_enabled_r2_without_required_environment_references() {
-    let input = VALID_CONFIG.replace(
+fn rejects_enabled_r2_without_required_values() {
+    let input = valid_config().replace(
         "rolling_buffer_seconds = 30",
         "rolling_buffer_seconds = 30\nr2_enabled = true",
     );
 
-    let error = Config::parse(&input).expect_err("enabled R2 should require references");
+    let error = Config::parse(&input)
+        .expect("configuration should parse")
+        .decrypt_secrets(&SecretManager::from_key(TEST_KEY))
+        .expect_err("enabled R2 should require values");
 
     let message = error.to_string();
-    assert!(message.contains("r2_endpoint_env is required when r2_enabled is true"));
-    assert!(message.contains("r2_access_key_id_env is required when r2_enabled is true"));
-    assert!(message.contains("r2_secret_access_key_env is required when r2_enabled is true"));
-    assert!(message.contains("r2_bucket_env is required when r2_enabled is true"));
+    assert!(message.contains("r2_endpoint is required when r2_enabled is true"));
+    assert!(message.contains("r2_access_key_id is required when r2_enabled is true"));
+    assert!(message.contains("r2_secret_access_key is required when r2_enabled is true"));
+    assert!(message.contains("r2_bucket is required when r2_enabled is true"));
 }

@@ -153,7 +153,13 @@ struct R2Environment {
 }
 
 fn r2_environment() -> R2Environment {
-    let config = Config::parse(
+    let endpoint = required_env("CAMWATCH_R2_ENDPOINT");
+    let access_key_id = required_env("CAMWATCH_R2_ACCESS_KEY_ID");
+    let secret_access_key = required_env("CAMWATCH_R2_SECRET_ACCESS_KEY");
+    let bucket = required_env("CAMWATCH_R2_BUCKET");
+    let prefix = env::var("CAMWATCH_R2_PREFIX").unwrap_or_default();
+    let region = env::var("CAMWATCH_R2_REGION").unwrap_or_else(|_| "auto".to_owned());
+    let config = Config::parse(&format!(
         r#"
 [app]
 bind_address = "127.0.0.1:8080"
@@ -162,23 +168,23 @@ pre_event_seconds = 1
 post_event_seconds = 1
 rolling_buffer_seconds = 30
 r2_enabled = true
-r2_endpoint_env = "CAMWATCH_R2_ENDPOINT"
-r2_access_key_id_env = "CAMWATCH_R2_ACCESS_KEY_ID"
-r2_secret_access_key_env = "CAMWATCH_R2_SECRET_ACCESS_KEY"
-r2_bucket_env = "CAMWATCH_R2_BUCKET"
-r2_prefix_env = "CAMWATCH_R2_PREFIX"
-r2_region_env = "CAMWATCH_R2_REGION"
+ r2_endpoint = "{endpoint}"
+ r2_access_key_id = "{access_key_id}"
+ r2_secret_access_key = "{secret_access_key}"
+ r2_bucket = "{bucket}"
+ r2_prefix = "{prefix}"
+ r2_region = "{region}"
 "#,
-    )
+    ))
     .expect("R2 configuration should be valid");
 
     R2Environment {
-        endpoint: required_env("CAMWATCH_R2_ENDPOINT"),
-        access_key_id: required_env("CAMWATCH_R2_ACCESS_KEY_ID"),
-        secret_access_key: required_env("CAMWATCH_R2_SECRET_ACCESS_KEY"),
-        bucket: required_env("CAMWATCH_R2_BUCKET"),
-        prefix: env::var("CAMWATCH_R2_PREFIX").unwrap_or_default(),
-        region: env::var("CAMWATCH_R2_REGION").unwrap_or_else(|_| "auto".to_owned()),
+        endpoint,
+        access_key_id,
+        secret_access_key,
+        bucket,
+        prefix,
+        region,
         config,
     }
 }
@@ -232,7 +238,7 @@ segment_rotation_seconds = 1
 [[cameras]]
 id = "front-door"
 name = "Front door"
-rtsp_url_env = "CAMWATCH_FRONT_DOOR_RTSP_URL"
+rtsp_url = "rtsp://127.0.0.1:8554/front-door"
 motion_min_area = 1000
 yolo_confidence = 0.5
 clip_after_motion = true

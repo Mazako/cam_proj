@@ -1,4 +1,4 @@
-use std::{env, thread};
+use std::thread;
 
 use gstreamer as gst;
 use tokio::sync::mpsc;
@@ -16,15 +16,6 @@ pub struct GstreamerCameraStream {
 }
 
 impl GstreamerCameraStream {
-    pub fn from_environment(
-        rtsp_url_env: &str,
-        codec: RtspCodec,
-        recording: SegmentRecordingConfig,
-    ) -> Result<Self, CameraStreamError> {
-        let rtsp_url = env::var(rtsp_url_env).map_err(|_| CameraStreamError::Unavailable)?;
-        Self::new(rtsp_url, codec, recording)
-    }
-
     pub fn new(
         rtsp_url: String,
         codec: RtspCodec,

@@ -83,7 +83,7 @@ segment_rotation_seconds = 1
 [[cameras]]
 id = "front-door"
 name = "Front door"
-rtsp_url_env = "CAMWATCH_FRONT_DOOR_RTSP_URL"
+rtsp_url = "rtsp://127.0.0.1:8554/front-door"
 motion_min_area = 1000
 yolo_confidence = 0.3
 clip_after_motion = {clip_after_motion}
