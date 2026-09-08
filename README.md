@@ -10,8 +10,8 @@ The application is deliberately designed for a trusted local network. Its web se
 - GStreamer RTSP/TCP ingest, rotating playable MP4 segments, and HLS output.
 - OpenCV MOG2 motion detection plus optional embedded YOLO confirmation for people, cats, and dogs.
 - MP4 event clips built from configurable pre-event and post-event windows.
-- SQLite metadata storage with WAL and foreign-key support.
-- Safe rolling-buffer retention that does not remove segments reserved by an active clip.
+- SQLite camera metadata storage with WAL and foreign-key support.
+- In-memory rolling-buffer retention that keeps segments referenced by active clip jobs.
 - Cloudflare R2 uploads through an S3-compatible adapter, retried up to three times without deleting a failed local clip.
 - Authenticated SSR camera CRUD, camera status, HLS playback, and ONVIF PTZ controls.
 - AES-256-GCM encryption for RTSP URLs, ONVIF credentials, and R2 settings at rest.
@@ -30,7 +30,7 @@ flowchart LR
     YOLO -->|"person / cat / dog"| Clip
     Segments --> Clip
     Clip --> EventMP4["Event MP4<br/>pre + post window"]
-    Clip --> SQLite[("SQLite<br/>cameras + segments")]
+    Panel --> SQLite[("SQLite<br/>cameras")]
     EventMP4 --> Upload["Background uploader<br/>three attempts"]
     Upload --> R2["Cloudflare R2"]
     Ingest --> HLS["HLS playlist + TS segments"]
@@ -53,10 +53,10 @@ Camwatch is one modular process, not a microservice system.
 1. Every active camera has its own RTSP runtime. GStreamer records short MP4 segments and exposes frames to the analysis path.
 2. MOG2 evaluates frames for motion; `motion_min_area` filters the contour area.
 3. With `clip_after_motion = true` (the default), qualifying motion starts the event. With `false`, YOLO must also detect a person, cat, or dog.
-4. Camwatch reserves already-written pre-event segments, then collects segments through the post-event window.
+4. Camwatch keeps finalized segments in memory and shares their `Arc` references with active clips through the post-event window.
 5. A background worker assembles those segments into an MP4 below `clips_directory`.
 6. Another worker uploads the clip to R2 or performs a no-op when R2 is disabled. A failure is retried three times and never removes the local MP4.
-7. The retention worker removes expired, unreserved segments from disk and SQLite. Clip and upload state is intentionally in memory, so a restart cancels unfinished work.
+7. The retention worker removes expired segments from disk only after the manager is their sole `Arc` owner. Segment, clip, and upload state is intentionally in memory, so a restart cancels unfinished work.
 
 ## Requirements
 
@@ -159,7 +159,7 @@ Start from [config/camwatch.example.toml](config/camwatch.example.toml). Unknown
 | `yolo_confidence` | Yes | — | YOLO confidence threshold from `0.0` through `1.0`. |
 | `clip_after_motion` | No | `true` | `true`: motion is sufficient. `false`: YOLO must confirm motion before a clip starts. |
 
-The initial TOML file seeds and updates cameras in SQLite at startup. SQLite then remains the durable source of truth for cameras and segment metadata. The panel can add, edit, and soft-delete cameras, applying runtime reloads immediately.
+The initial TOML file seeds and updates cameras in SQLite at startup. SQLite then remains the durable source of truth for cameras. The panel can add, edit, and soft-delete cameras, applying runtime reloads immediately.
 
 ## Secrets and environment variables
 

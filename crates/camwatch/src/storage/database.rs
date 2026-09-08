@@ -4,11 +4,11 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use super::{Camera, NewCamera, NewSegment, Segment, StorageError};
+use super::{Camera, NewCamera, StorageError};
 use sqlx::{
     SqlitePool,
     migrate::Migrator,
-    query_as, query_builder,
+    query_as,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
 };
 
@@ -151,98 +151,5 @@ impl Database {
         .map_err(StorageError::Database)?;
 
         Ok(result.rows_affected() == 1)
-    }
-
-    pub async fn upsert_segment(&self, segment: NewSegment) -> Result<Segment, StorageError> {
-        let now = unix_time_millis(SystemTime::now()).unwrap_or_default();
-
-        let result = sqlx::query_as::<_, Segment>(
-            "INSERT INTO segments (
-                path, camera_id, started_at, ended_at, size_bytes, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(path) DO UPDATE SET
-                camera_id = excluded.camera_id,
-                started_at = excluded.started_at,
-                ended_at = excluded.ended_at,
-                size_bytes = excluded.size_bytes,
-                updated_at = excluded.updated_at
-                RETURNING camera_id, path, started_at, ended_at, size_bytes",
-        )
-        .bind(&segment.path)
-        .bind(&segment.camera_id)
-        .bind(segment.started_at)
-        .bind(segment.ended_at)
-        .bind(segment.size_bytes)
-        .bind(now)
-        .bind(now)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(StorageError::Database)?;
-
-        Ok(result)
-    }
-
-    pub async fn segments_overlapping(
-        &self,
-        camera_id: &str,
-        started_at: i64,
-        ended_at: i64,
-    ) -> Result<Vec<Segment>, StorageError> {
-        let segments = query_as::<_, Segment>(
-            "SELECT camera_id, path, started_at, ended_at, size_bytes
-             FROM segments
-             WHERE camera_id = ? AND started_at <= ? AND ended_at >= ?
-             ORDER BY started_at, path",
-        )
-        .bind(camera_id)
-        .bind(ended_at)
-        .bind(started_at)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(StorageError::Database)?;
-
-        Ok(segments)
-    }
-
-    pub async fn get_segments_finished_before(
-        &self,
-        before: SystemTime,
-    ) -> Result<Vec<Segment>, StorageError> {
-        let before_timestamp = unix_time_millis(before).unwrap_or_default();
-
-        let segments = query_as::<_, Segment>(
-            "SELECT camera_id, path, started_at, ended_at, size_bytes
-             FROM segments
-             WHERE ended_at < ?",
-        )
-        .bind(before_timestamp)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(StorageError::Database)?;
-
-        Ok(segments)
-    }
-
-    pub async fn remove_segments(&self, paths: &[String]) -> Result<(), StorageError> {
-        if paths.is_empty() {
-            return Ok(());
-        }
-
-        let mut query = query_builder::QueryBuilder::new("DELETE FROM segments WHERE path IN (");
-        {
-            let mut separated = query.separated(", ");
-            for path in paths {
-                separated.push_bind(path);
-            }
-        }
-        query.push(")");
-
-        query
-            .build()
-            .execute(&self.pool)
-            .await
-            .map_err(StorageError::Database)?;
-
-        Ok(())
     }
 }

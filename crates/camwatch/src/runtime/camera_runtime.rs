@@ -7,11 +7,10 @@ use std::{
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    clips::{ClipManager, store_segment},
+    clips::ClipManager,
     config::{AppConfig, CameraConfig},
     motion::{Mog2MotionDetector, MotionDetector, YoloAnalyzer},
     onvif::OnvifConnection,
-    storage::Database,
     stream::{CameraStatusModel, CameraStream, CameraStreamEvent, CameraStreamStatus, Frame},
 };
 
@@ -21,7 +20,6 @@ pub struct CameraRuntime<S> {
     camera_config: CameraConfig,
     stream: S,
     status_model: Arc<CameraStatusModel>,
-    database: Database,
     motion_detector: Mog2MotionDetector,
     clip_manager: Arc<ClipManager>,
     yolo_analyzer: Option<YoloAnalyzer>,
@@ -37,7 +35,6 @@ where
         app_config: &AppConfig,
         stream: S,
         status_model: Arc<CameraStatusModel>,
-        database: Database,
         clip_manager: Arc<ClipManager>,
     ) -> Self {
         let motion_detector = Mog2MotionDetector::new().unwrap();
@@ -53,7 +50,6 @@ where
             camera_config,
             stream,
             status_model,
-            database,
             motion_detector,
             clip_manager,
             yolo_analyzer,
@@ -84,15 +80,14 @@ where
                         self.handle_status_event(status);
                     }
                     Ok(CameraStreamEvent::Frame(frame)) => {
-                        self.handle_frame_event(frame).await;
+                        self.handle_frame_event(frame);
                     }
                     Ok(CameraStreamEvent::SegmentFinalized {
                         path,
                         started_at,
                         ended_at,
                     }) => {
-                        self.handle_segment_finalized_event(path, started_at, ended_at)
-                            .await;
+                        self.handle_segment_finalized_event(path, started_at, ended_at);
                     }
                     Err(_) => {
                         tracing::warn!(
@@ -127,7 +122,7 @@ where
         }
     }
 
-    async fn handle_frame_event(&mut self, frame: Frame) {
+    fn handle_frame_event(&mut self, frame: Frame) {
         if self
             .clip_manager
             .is_camera_recording(self.camera_config.id.as_str())
@@ -141,41 +136,30 @@ where
             self.is_motion_detected(&frame) && self.is_yolo_motion_detected(&frame)
         };
         if clip_triggered
-            && let Err(error) = self
-                .clip_manager
-                .add_clip(
-                    self.camera_config.id.as_str().to_owned(),
-                    frame.captured_at,
-                    Duration::from_secs(self.pre_event_seconds),
-                    Duration::from_secs(self.post_event_seconds),
-                )
-                .await
+            && let Err(error) = self.clip_manager.add_clip(
+                self.camera_config.id.as_str().to_owned(),
+                frame.captured_at,
+                Duration::from_secs(self.pre_event_seconds),
+                Duration::from_secs(self.post_event_seconds),
+            )
         {
             tracing::warn!(camera_id = self.camera_config.id.as_str(), %error, "clip could not be started");
         }
     }
 
-    async fn handle_segment_finalized_event(
+    fn handle_segment_finalized_event(
         &mut self,
         path: PathBuf,
         started_at: SystemTime,
         ended_at: SystemTime,
     ) {
-        match store_segment(
-            &self.database,
-            self.camera_config.id.as_str(),
+        if let Err(error) = self.clip_manager.register_segment(
+            self.camera_config.id.as_str().to_owned(),
             path,
             started_at,
             ended_at,
-        )
-        .await
-        {
-            Err(error) => {
-                tracing::warn!(camera_id = self.camera_config.id.as_str(), %error, "segment could not be stored");
-            }
-            Ok(segment) => {
-                self.clip_manager.put_segment_and_try_save_clip(segment);
-            }
+        ) {
+            tracing::warn!(camera_id = self.camera_config.id.as_str(), %error, "segment could not be stored");
         }
     }
 

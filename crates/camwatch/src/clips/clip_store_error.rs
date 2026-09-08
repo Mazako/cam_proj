@@ -1,12 +1,12 @@
 use thiserror::Error;
 
-use crate::storage::StorageError;
-
 #[derive(Debug, Error)]
 pub enum ClipStoreError {
     #[error("segment time range is invalid")]
     InvalidTimeRange,
-    #[error("path is not valid UTF-8")]
+    #[error("segment is already registered")]
+    SegmentAlreadyRegistered,
+    #[error("path cannot be converted to a file URL")]
     InvalidPath,
     #[error("no segments overlap the requested clip range")]
     NoSegments,
@@ -28,8 +28,6 @@ pub enum ClipStoreError {
     PipelineExecution,
     #[error("clip metadata could not be read")]
     ClipMetadata,
-    #[error(transparent)]
-    Storage(#[from] StorageError),
     #[error("clip assembly task stopped unexpectedly")]
     AssemblyTask,
 }

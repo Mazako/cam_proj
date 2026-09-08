@@ -12,7 +12,6 @@ use camwatch::{
     clips::ClipManager,
     config::{AppConfig, Config},
     runtime::CameraRuntime,
-    storage::{Database, NewCamera},
     stream::{
         CameraStatusModel, CameraStream, CameraStreamError, CameraStreamEvent, CameraStreamFuture,
         CameraStreamStatus, Frame, PixelFormat,
@@ -58,14 +57,9 @@ impl CameraStream for BlockingCameraStream {
 
 #[tokio::test]
 async fn stops_gracefully_when_cancelled_while_waiting_for_stream() {
-    let directory = tempdir().expect("temporary directory should exist");
-    let (database, _) = Database::open(&directory.path().join("camwatch.sqlite3"))
-        .await
-        .expect("database should open");
     let app_config = app_config();
     let (clip_sender, _clip_receiver) = tokio::sync::mpsc::unbounded_channel();
     let clip_manager = Arc::new(ClipManager::new(
-        database.clone(),
         clip_sender,
         app_config.clips_directory.clone(),
     ));
@@ -77,7 +71,6 @@ async fn stops_gracefully_when_cancelled_while_waiting_for_stream() {
             shutdown_called: Arc::clone(&shutdown_called),
         },
         Arc::new(CameraStatusModel::default()),
-        database,
         clip_manager,
     )
     .await;
@@ -94,10 +87,6 @@ async fn stops_gracefully_when_cancelled_while_waiting_for_stream() {
 
 #[tokio::test]
 async fn updates_status_from_the_camera_stream() {
-    let directory = tempdir().expect("temporary directory should exist");
-    let (database, _) = Database::open(&directory.path().join("camwatch.sqlite3"))
-        .await
-        .expect("database should open");
     let status_model = Arc::new(CameraStatusModel::default());
     let stream = FakeCameraStream {
         events: VecDeque::from([
@@ -111,7 +100,6 @@ async fn updates_status_from_the_camera_stream() {
     let app_config = app_config();
     let (clip_sender, _clip_receiver) = tokio::sync::mpsc::unbounded_channel();
     let clip_manager = Arc::new(ClipManager::new(
-        database.clone(),
         clip_sender,
         app_config.clips_directory.clone(),
     ));
@@ -120,7 +108,6 @@ async fn updates_status_from_the_camera_stream() {
         &app_config,
         stream,
         Arc::clone(&status_model),
-        database,
         clip_manager,
     )
     .await;
@@ -139,22 +126,6 @@ async fn updates_status_from_the_camera_stream() {
 #[tokio::test]
 async fn queues_clip_with_pre_and_post_window() {
     let directory = tempdir().expect("temporary directory should exist");
-    let (database, _) = Database::open(&directory.path().join("camwatch.sqlite3"))
-        .await
-        .expect("database should open");
-    database
-        .upsert_cameras(&[NewCamera {
-            id: "front-door".to_owned(),
-            name: "Front door".to_owned(),
-            rtsp_url: "CAMWATCH_FRONT_DOOR_RTSP_URL".to_owned(),
-            onvif_url: None,
-            onvif_credentials: None,
-            motion_min_area: 1000,
-            yolo_confidence: 0.5,
-            clip_after_motion: true,
-        }])
-        .await
-        .expect("camera should be seeded");
     let detected_at = SystemTime::UNIX_EPOCH + Duration::from_secs(100);
     let segment_path = directory.path().join("segment.mp4");
     fs::write(&segment_path, b"segment").expect("segment should be created");
@@ -197,17 +168,12 @@ async fn queues_clip_with_pre_and_post_window() {
 
     let stream = FakeCameraStream { events };
     let (clip_sender, mut clip_receiver) = tokio::sync::mpsc::unbounded_channel();
-    let clip_manager = Arc::new(ClipManager::new(
-        database.clone(),
-        clip_sender,
-        app_config().clips_directory,
-    ));
+    let clip_manager = Arc::new(ClipManager::new(clip_sender, app_config().clips_directory));
     let runtime = CameraRuntime::new(
         camera_config(),
         &app_config(),
         stream,
         Arc::new(CameraStatusModel::default()),
-        database,
         Arc::clone(&clip_manager),
     )
     .await;
@@ -226,10 +192,8 @@ async fn queues_clip_with_pre_and_post_window() {
     assert!(clip.path.to_string_lossy().ends_with(".mp4"));
     assert_eq!(clip.segments.len(), 1);
 
-    let reserved_path = clip.segments[0].path.clone();
-    assert!(clip_manager.is_segment_reserved(&reserved_path));
-    drop(clip);
-    assert!(!clip_manager.is_segment_reserved(&reserved_path));
+    let segment_path = clip.segments[0].path.clone();
+    assert!(segment_path.is_file());
 }
 
 fn camera_config() -> camwatch::config::CameraConfig {

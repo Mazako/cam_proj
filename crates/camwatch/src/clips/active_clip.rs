@@ -1,20 +1,20 @@
 use std::{
     path::PathBuf,
+    sync::Arc,
     time::{Duration, SystemTime},
 };
 use uuid::Uuid;
 
-use crate::storage::{Segment, unix_time_millis};
+use crate::storage::unix_time_millis;
 
-use super::{ClipJob, segment_lease::SegmentLease};
+use super::{ClipJob, ClipStoreError, Segment};
 
 pub(super) struct ActiveClip {
     camera_id: String,
     started_at: SystemTime,
     ended_at: SystemTime,
     path: PathBuf,
-    segments: Vec<Segment>,
-    lease: SegmentLease,
+    segments: Vec<Arc<Segment>>,
 }
 
 impl ActiveClip {
@@ -24,23 +24,24 @@ impl ActiveClip {
         pre_duration: Duration,
         post_duration: Duration,
         path: PathBuf,
-        lease: SegmentLease,
-    ) -> Self {
-        let started_at = detected_at.checked_sub(pre_duration).unwrap();
-        let ended_at = detected_at.checked_add(post_duration).unwrap();
+    ) -> Result<Self, ClipStoreError> {
+        let started_at = detected_at
+            .checked_sub(pre_duration)
+            .ok_or(ClipStoreError::InvalidTimeRange)?;
+        let ended_at = detected_at
+            .checked_add(post_duration)
+            .ok_or(ClipStoreError::InvalidTimeRange)?;
 
-        Self {
+        Ok(Self {
             camera_id,
             started_at,
             ended_at,
             path,
             segments: Vec::new(),
-            lease,
-        }
+        })
     }
 
-    pub(super) fn add_segment(&mut self, segment: Segment) {
-        self.lease.reserve(segment.path.clone());
+    pub(super) fn add_segment(&mut self, segment: Arc<Segment>) {
         self.segments.push(segment);
     }
 
@@ -52,7 +53,7 @@ impl ActiveClip {
         let ended_at = unix_time_millis(self.ended_at).unwrap_or_default();
         self.segments
             .iter()
-            .any(|segment| segment.ended_at >= ended_at)
+            .any(|segment| unix_time_millis(segment.ended_at).unwrap_or_default() >= ended_at)
     }
 
     pub(super) fn into_job(self) -> ClipJob {
@@ -63,7 +64,6 @@ impl ActiveClip {
             ended_at: self.ended_at,
             path: self.path,
             segments: self.segments,
-            _lease: self.lease,
         }
     }
 }

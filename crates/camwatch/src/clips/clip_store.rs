@@ -1,81 +1,19 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    time::{Duration, SystemTime},
+    time::Duration,
 };
 
 use gstreamer::{self as gst, prelude::*};
 use gstreamer_pbutils as gst_pbutils;
 use url::Url;
 
-use crate::{
-    storage::{Database, NewSegment, Segment, unix_time_millis},
-    stream::escape_pipeline_value,
-};
+use crate::stream::escape_pipeline_value;
 
-use super::{Clip, ClipStoreError};
-
-pub async fn store_segment(
-    database: &Database,
-    camera_id: &str,
-    segment_path: PathBuf,
-    started_at: SystemTime,
-    ended_at: SystemTime,
-) -> Result<Segment, ClipStoreError> {
-    let started_at = unix_time_millis(started_at).ok_or(ClipStoreError::InvalidTimeRange)?;
-    let ended_at = unix_time_millis(ended_at).ok_or(ClipStoreError::InvalidTimeRange)?;
-    if ended_at < started_at {
-        return Err(ClipStoreError::InvalidTimeRange);
-    }
-
-    let path = segment_path
-        .to_str()
-        .ok_or(ClipStoreError::InvalidPath)?
-        .to_owned();
-    let size_bytes = fs::metadata(&segment_path)
-        .map_err(ClipStoreError::FileMetadata)?
-        .len()
-        .try_into()
-        .map_err(|_| ClipStoreError::FileMetadata(std::io::Error::other("file is too large")))?;
-
-    let result = database
-        .upsert_segment(NewSegment {
-            camera_id: camera_id.to_owned(),
-            path,
-            started_at,
-            ended_at,
-            size_bytes,
-        })
-        .await?;
-
-    Ok(result)
-}
-
-pub async fn create_clip(
-    database: &Database,
-    camera_id: &str,
-    started_at: SystemTime,
-    ended_at: SystemTime,
-    output_path: PathBuf,
-) -> Result<Clip, ClipStoreError> {
-    let started_at = unix_time_millis(started_at).ok_or(ClipStoreError::InvalidTimeRange)?;
-    let ended_at = unix_time_millis(ended_at).ok_or(ClipStoreError::InvalidTimeRange)?;
-    if ended_at < started_at {
-        return Err(ClipStoreError::InvalidTimeRange);
-    }
-
-    let segments = database
-        .segments_overlapping(camera_id, started_at, ended_at)
-        .await?;
-    if segments.is_empty() {
-        return Err(ClipStoreError::NoSegments);
-    }
-
-    create_clip_from_segments(segments, output_path).await
-}
+use super::{Clip, ClipStoreError, Segment};
 
 pub(crate) async fn create_clip_from_segments(
-    segments: Vec<Segment>,
+    segments: Vec<std::sync::Arc<Segment>>,
     output_path: PathBuf,
 ) -> Result<Clip, ClipStoreError> {
     if segments.is_empty() {
@@ -87,7 +25,10 @@ pub(crate) async fn create_clip_from_segments(
         .map_err(|_| ClipStoreError::AssemblyTask)?
 }
 
-fn assemble_clip(segments: Vec<Segment>, output_path: PathBuf) -> Result<Clip, ClipStoreError> {
+fn assemble_clip(
+    segments: Vec<std::sync::Arc<Segment>>,
+    output_path: PathBuf,
+) -> Result<Clip, ClipStoreError> {
     gst::init().map_err(|_| ClipStoreError::GstreamerInitialization)?;
 
     let output_directory = output_path

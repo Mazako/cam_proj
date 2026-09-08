@@ -183,7 +183,6 @@ impl AppState {
             &self.runtime_config,
             stream,
             Arc::clone(&self.status_model),
-            self.database.as_ref().clone(),
             Arc::clone(&self.clip_manager),
         )
         .await;
@@ -266,13 +265,8 @@ pub async fn bootstrap_with_secret_manager(
     let upload_sender = create_clip_uploader_worker(uploader);
     let clip_sender = create_clip_worker(upload_sender);
     let database = Arc::new(database);
-    let clip_manager = Arc::new(ClipManager::new(
-        database.as_ref().clone(),
-        clip_sender,
-        app.clips_directory.clone(),
-    ));
+    let clip_manager = Arc::new(ClipManager::new(clip_sender, app.clips_directory.clone()));
     create_retainer_worker(
-        database.as_ref().clone(),
         u64::from(app.rolling_buffer_seconds),
         Arc::clone(&clip_manager),
     );
@@ -304,7 +298,6 @@ pub async fn bootstrap_with_secret_manager(
                     &app,
                     stream,
                     Arc::clone(&status_model),
-                    database.as_ref().clone(),
                     Arc::clone(&clip_manager),
                 )
                 .await;

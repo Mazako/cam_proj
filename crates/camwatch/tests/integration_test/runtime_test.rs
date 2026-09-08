@@ -9,9 +9,7 @@ use camwatch::{
 use tempfile::tempdir;
 use tokio_util::sync::CancellationToken;
 
-use super::support::{
-    RtspSession, assemble_pets2006_mp4, camera_stream, database_with_camera, pets2006_dataset,
-};
+use super::support::{RtspSession, assemble_pets2006_mp4, camera_stream, pets2006_dataset};
 
 #[tokio::test]
 async fn queues_clip_when_motion_is_sufficient() {
@@ -35,13 +33,11 @@ async fn run_runtime_until_clip(clip_after_motion: bool) -> ClipJob {
     let video_path = directory.path().join("pets2006.mp4");
     assemble_pets2006_mp4(&dataset, &video_path);
 
-    let database = database_with_camera(directory.path()).await;
     let session = RtspSession::start("runtime", Some(&video_path)).await;
     let stream = camera_stream(session.url.clone(), directory.path());
     let (clip_sender, mut clip_receiver) = tokio::sync::mpsc::unbounded_channel();
     let app_config = app_config();
     let clip_manager = Arc::new(ClipManager::new(
-        database.clone(),
         clip_sender,
         app_config.clips_directory.clone(),
     ));
@@ -50,7 +46,6 @@ async fn run_runtime_until_clip(clip_after_motion: bool) -> ClipJob {
         &app_config,
         stream,
         Arc::new(CameraStatusModel::default()),
-        database,
         clip_manager,
     )
     .await;

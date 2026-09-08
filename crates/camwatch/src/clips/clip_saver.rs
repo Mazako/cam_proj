@@ -24,7 +24,6 @@ async fn run_worker(
             ended_at: _,
             path,
             segments,
-            _lease,
         } = job;
 
         match create_clip_from_segments(segments, path).await {

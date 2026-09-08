@@ -4,53 +4,63 @@ use aws_config::BehaviorVersion;
 use aws_sdk_s3::{Client, config::Credentials};
 use camwatch::{
     bucket::{BucketUploader, R2Client},
-    clips::{
-        ClipManager, create_clip, create_clip_uploader_worker, create_clip_worker, store_segment,
-    },
+    clips::{ClipManager, create_clip_uploader_worker, create_clip_worker},
     config::{AppConfig, CameraConfig, Config},
     runtime::CameraRuntime,
     stream::CameraStatusModel,
 };
 use tempfile::tempdir;
+use tokio::{sync::mpsc, time::timeout};
 use tokio_util::sync::CancellationToken;
 
 use super::support::{
-    RtspSession, assemble_pets2006_mp4, camera_stream, database_with_camera, is_playable_mp4,
-    pets2006_dataset, wait_for_finalized_segment, wait_for_online_frame,
+    RtspSession, assemble_pets2006_mp4, camera_stream, is_playable_mp4, pets2006_dataset,
+    wait_for_finalized_segment, wait_for_online_frame,
 };
 
 #[tokio::test]
-async fn assembles_a_clip_from_persisted_rtsp_segments() {
+async fn assembles_a_clip_from_in_memory_rtsp_segments() {
     let session = RtspSession::start("clips", None).await;
     let directory = tempdir().expect("temporary directory should exist");
     let mut stream = camera_stream(session.url.clone(), &directory.path().join("segments"));
-    let database = database_with_camera(directory.path()).await;
+    let (upload_sender, mut upload_receiver) = mpsc::unbounded_channel();
+    let clip_sender = create_clip_worker(upload_sender);
+    let clip_manager = Arc::new(ClipManager::new(
+        clip_sender,
+        directory.path().join("clips"),
+    ));
 
     wait_for_online_frame(&mut stream).await;
     let first = wait_for_finalized_segment(&mut stream).await;
     let second = wait_for_finalized_segment(&mut stream).await;
 
-    for (path, started_at, ended_at) in [&first, &second] {
-        store_segment(
-            &database,
-            "front-door",
-            path.clone(),
-            *started_at,
-            *ended_at,
+    clip_manager
+        .register_segment("front-door".to_owned(), first.0.clone(), first.1, first.2)
+        .expect("first segment should register");
+    clip_manager
+        .add_clip(
+            "front-door".to_owned(),
+            first.1,
+            Duration::ZERO,
+            second
+                .2
+                .duration_since(first.1)
+                .expect("times should be ordered"),
         )
+        .expect("clip should start");
+    clip_manager
+        .register_segment(
+            "front-door".to_owned(),
+            second.0.clone(),
+            second.1,
+            second.2,
+        )
+        .expect("second segment should register");
+    let upload = timeout(Duration::from_secs(10), upload_receiver.recv())
         .await
-        .expect("finalized segment should be stored");
-    }
-
-    let clip = create_clip(
-        &database,
-        "front-door",
-        first.1,
-        second.2,
-        directory.path().join("clips/event-1.mp4"),
-    )
-    .await
-    .expect("clip should be assembled");
+        .expect("clip should be assembled before timeout")
+        .expect("clip worker should send an upload job");
+    let clip = upload.request.clip;
 
     assert!(clip.path.is_file());
     assert!(clip.duration > Duration::ZERO);
@@ -71,7 +81,6 @@ async fn records_assembles_and_uploads_a_clip_to_r2() {
     let directory = tempdir().expect("temporary directory should exist");
     let video_path = directory.path().join("pets2006.mp4");
     assemble_pets2006_mp4(&pets2006_dataset(), &video_path);
-    let database = database_with_camera(directory.path()).await;
     let session = RtspSession::start("full-r2", Some(&video_path)).await;
     let app_config = app_config(directory.path());
     let stream = camera_stream(
@@ -83,7 +92,6 @@ async fn records_assembles_and_uploads_a_clip_to_r2() {
     let upload_sender = create_clip_uploader_worker(uploader);
     let clip_sender = create_clip_worker(upload_sender);
     let clip_manager = Arc::new(ClipManager::new(
-        database.clone(),
         clip_sender,
         app_config.clips_directory.clone(),
     ));
@@ -92,7 +100,6 @@ async fn records_assembles_and_uploads_a_clip_to_r2() {
         &app_config,
         stream,
         Arc::new(CameraStatusModel::default()),
-        database,
         clip_manager,
     )
     .await;

@@ -32,12 +32,12 @@ Każdy task jest powiązany z wymaganiami z [dokumentu przewodniego](README.md).
 
 **Pokrywa:** FR-06
 
-**Zakres:** migracje `cameras` i `segments`; SQLite przechowuje wyłącznie dane potrzebne do bufora i inicjalizacji kamer. Historia zdarzeń oraz uploadów nie jest zapisywana.
+**Zakres:** migracje `cameras`; SQLite przechowuje dane potrzebne do inicjalizacji kamer. Bufor segmentów, historia zdarzeń oraz uploadów nie są zapisywane.
 
 **Kryteria akceptacji:**
 
 - Migracje są idempotentne.
-- Dane kamer i segmentów można zapisać oraz odczytać.
+- Dane kamer można zapisać oraz odczytać.
 - Schemat nie zawiera tabel historii zdarzeń ani uploadów.
 
 **Zależności:** ARC-01.

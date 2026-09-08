@@ -1,105 +1,176 @@
 use std::{
+    collections::HashMap,
+    fs,
     path::PathBuf,
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::{Duration, SystemTime},
 };
 
-use dashmap::DashMap;
 use tokio::sync::mpsc;
 
-use crate::storage::{Database, Segment, StorageError, unix_time_millis};
+use crate::storage::unix_time_millis;
 
-use super::{ClipJob, active_clip::ActiveClip, segment_lease::SegmentLease};
+use super::{ClipJob, ClipStoreError, Segment, active_clip::ActiveClip};
 
-type SegmentReservations = Arc<DashMap<String, usize>>;
+struct ClipState {
+    clips: HashMap<String, ActiveClip>,
+    segments: HashMap<PathBuf, Arc<Segment>>,
+}
 
 pub struct ClipManager {
-    clips: DashMap<String, ActiveClip>,
-    database: Database,
+    state: Mutex<ClipState>,
     clip_sender: mpsc::UnboundedSender<ClipJob>,
     clips_directory: PathBuf,
-    segment_reservations: SegmentReservations,
 }
 
 impl ClipManager {
-    pub fn new(
-        database: Database,
-        clip_sender: mpsc::UnboundedSender<ClipJob>,
-        clips_directory: PathBuf,
-    ) -> Self {
+    pub fn new(clip_sender: mpsc::UnboundedSender<ClipJob>, clips_directory: PathBuf) -> Self {
         Self {
-            clips: DashMap::new(),
-            database,
+            state: Mutex::new(ClipState {
+                clips: HashMap::new(),
+                segments: HashMap::new(),
+            }),
             clip_sender,
             clips_directory,
-            segment_reservations: Arc::new(DashMap::new()),
         }
     }
 
-    pub async fn add_clip(
+    pub fn add_clip(
         &self,
         camera_id: String,
         detected_at: SystemTime,
         pre_duration: Duration,
         post_duration: Duration,
-    ) -> Result<(), StorageError> {
+    ) -> Result<(), ClipStoreError> {
         let mut clip = ActiveClip::new(
             camera_id.clone(),
             detected_at,
             pre_duration,
             post_duration,
             self.create_clip_path(&camera_id, detected_at),
-            SegmentLease::new(Arc::clone(&self.segment_reservations)),
-        );
-        let past_segments = self
-            .database
-            .segments_overlapping(
-                &camera_id,
-                unix_time_millis(clip.started_at()).unwrap_or_default(),
-                unix_time_millis(detected_at).unwrap_or_default(),
-            )
-            .await?;
+        )?;
+        let clip_started_at = clip.started_at();
+        let mut state = self
+            .state
+            .lock()
+            .expect("clip manager state should not be poisoned");
+        let mut past_segments = state
+            .segments
+            .values()
+            .filter(|segment| {
+                segment.camera_id == camera_id
+                    && segment.started_at <= detected_at
+                    && segment.ended_at >= clip_started_at
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        past_segments.sort_by(|left, right| {
+            left.started_at
+                .cmp(&right.started_at)
+                .then_with(|| left.path.cmp(&right.path))
+        });
 
         for segment in past_segments {
             clip.add_segment(segment);
         }
 
-        self.clips.insert(camera_id, clip);
+        state.clips.insert(camera_id, clip);
         Ok(())
     }
 
-    pub fn put_segment_and_try_save_clip(&self, segment: Segment) {
-        let camera_id = segment.camera_id.clone();
-        let ready = {
-            let Some(mut clip) = self.clips.get_mut(&camera_id) else {
-                return;
+    pub fn register_segment(
+        &self,
+        camera_id: String,
+        path: PathBuf,
+        started_at: SystemTime,
+        ended_at: SystemTime,
+    ) -> Result<(), ClipStoreError> {
+        if ended_at < started_at {
+            return Err(ClipStoreError::InvalidTimeRange);
+        }
+        let path = fs::canonicalize(path).map_err(ClipStoreError::FileMetadata)?;
+        let size_bytes = fs::metadata(&path)
+            .map_err(ClipStoreError::FileMetadata)?
+            .len();
+        let segment = Arc::new(Segment {
+            camera_id: camera_id.clone(),
+            path: path.clone(),
+            started_at,
+            ended_at,
+            size_bytes,
+        });
+        let job = {
+            let mut state = self
+                .state
+                .lock()
+                .expect("clip manager state should not be poisoned");
+            if state.segments.contains_key(&path) {
+                return Err(ClipStoreError::SegmentAlreadyRegistered);
+            }
+            state.segments.insert(path, Arc::clone(&segment));
+            let ready = if let Some(clip) = state.clips.get_mut(&camera_id) {
+                clip.add_segment(segment);
+                clip.is_sufficient()
+            } else {
+                false
             };
-
-            clip.add_segment(segment);
-            clip.is_sufficient()
-        };
-
-        if !ready {
-            return;
+            ready.then(|| state.clips.remove(&camera_id).map(|clip| clip.into_job()))
         }
+        .flatten();
 
-        let Some((_, clip)) = self.clips.remove(&camera_id) else {
-            return;
-        };
-        let job = clip.into_job();
-
-        if let Err(error) = self.clip_sender.send(job) {
+        if let Some(job) = job
+            && self.clip_sender.send(job).is_err()
+        {
             tracing::warn!(camera_id, "clip worker is unavailable");
-            drop(error.0);
         }
+        Ok(())
     }
 
     pub fn is_camera_recording(&self, camera_id: &str) -> bool {
-        self.clips.contains_key(camera_id)
+        self.state
+            .lock()
+            .expect("clip manager state should not be poisoned")
+            .clips
+            .contains_key(camera_id)
     }
 
-    pub fn is_segment_reserved(&self, path: &str) -> bool {
-        self.segment_reservations.contains_key(path)
+    pub async fn retain_expired_segments(&self, rolling_buffer_seconds: u64) {
+        let Some(before) =
+            SystemTime::now().checked_sub(Duration::from_secs(rolling_buffer_seconds))
+        else {
+            return;
+        };
+        let expired = {
+            let mut state = self
+                .state
+                .lock()
+                .expect("clip manager state should not be poisoned");
+            let paths = state
+                .segments
+                .iter()
+                .filter(|(_, segment)| segment.ended_at < before && Arc::strong_count(segment) == 1)
+                .map(|(path, _)| path.clone())
+                .collect::<Vec<_>>();
+            paths
+                .into_iter()
+                .filter_map(|path| state.segments.remove(&path))
+                .collect::<Vec<_>>()
+        };
+
+        for segment in expired {
+            match tokio::fs::remove_file(&segment.path).await {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => {
+                    tracing::warn!(path = %segment.path.display(), %error, "failed to remove segment file");
+                    self.state
+                        .lock()
+                        .expect("clip manager state should not be poisoned")
+                        .segments
+                        .insert(segment.path.clone(), segment);
+                }
+            }
+        }
     }
 
     fn create_clip_path(&self, camera_id: &str, started_at: SystemTime) -> PathBuf {

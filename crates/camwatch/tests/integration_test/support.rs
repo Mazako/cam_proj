@@ -5,12 +5,9 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use camwatch::{
-    storage::{Database, NewCamera},
-    stream::{
-        CameraStream, CameraStreamEvent, CameraStreamStatus, GstreamerCameraStream, HlsConfig,
-        SegmentRecordingConfig,
-    },
+use camwatch::stream::{
+    CameraStream, CameraStreamEvent, CameraStreamStatus, GstreamerCameraStream, HlsConfig,
+    SegmentRecordingConfig,
 };
 use testcontainers::{
     ContainerAsync, GenericImage, ImageExt, core::IntoContainerPort, runners::AsyncRunner,
@@ -197,27 +194,6 @@ pub async fn wait_for_finalized_segment(
     })
     .await
     .expect("RTSP stream should report a finalized MP4 segment")
-}
-
-pub async fn database_with_camera(directory: &Path) -> Database {
-    let (database, _) = Database::open(&directory.join("camwatch.sqlite3"))
-        .await
-        .expect("database should open");
-    database
-        .upsert_cameras(&[NewCamera {
-            id: "front-door".to_owned(),
-            name: "Front door".to_owned(),
-            rtsp_url: "CAMWATCH_FRONT_DOOR_RTSP_URL".to_owned(),
-            onvif_url: None,
-            onvif_credentials: None,
-            motion_min_area: 1000,
-            yolo_confidence: 0.5,
-            clip_after_motion: true,
-        }])
-        .await
-        .expect("camera should be seeded");
-
-    database
 }
 
 pub fn pets2006_dataset() -> PathBuf {
