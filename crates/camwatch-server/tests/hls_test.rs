@@ -14,6 +14,7 @@ use support::{cookie_request, login_with_default_credentials, response_body, tes
 #[tokio::test]
 async fn serves_authenticated_hls_playlist_and_segments() {
     let context = test_context().await;
+    context.state.stop_runtime("front-door").await;
     assert!(!context.state.runtime_running("front-door"));
     let hls_directory = context
         .state
