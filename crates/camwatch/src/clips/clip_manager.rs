@@ -35,13 +35,23 @@ impl ClipManager {
         }
     }
 
-    pub fn add_clip(
+    pub fn add_or_extend_clip(
         &self,
         camera_id: String,
         detected_at: SystemTime,
         pre_duration: Duration,
         post_duration: Duration,
     ) -> Result<(), ClipStoreError> {
+        let mut state = self
+            .state
+            .lock()
+            .expect("clip manager state should not be poisoned");
+
+        if let Some(existing_clip) = state.clips.get_mut(&camera_id) {
+            existing_clip.extend(detected_at + post_duration);
+            return Ok(());
+        }
+
         let mut clip = ActiveClip::new(
             camera_id.clone(),
             detected_at,
@@ -50,10 +60,7 @@ impl ClipManager {
             self.create_clip_path(&camera_id, detected_at),
         )?;
         let clip_started_at = clip.started_at();
-        let mut state = self
-            .state
-            .lock()
-            .expect("clip manager state should not be poisoned");
+
         let mut past_segments = state
             .segments
             .values()
@@ -126,12 +133,20 @@ impl ClipManager {
         Ok(())
     }
 
-    pub fn is_camera_recording(&self, camera_id: &str) -> bool {
-        self.state
+    pub fn save_if_has_clip(&self, camera_id: &str) -> Result<(), ClipStoreError> {
+        let mut state = self
+            .state
             .lock()
-            .expect("clip manager state should not be poisoned")
-            .clips
-            .contains_key(camera_id)
+            .expect("clip manager state should not be poisoned");
+        if let Some(clip) = state.clips.remove(camera_id)
+            && clip.has_segments()
+        {
+            let job = clip.into_job();
+            if self.clip_sender.send(job).is_err() {
+                tracing::warn!(camera_id, "clip worker is unavailable");
+            }
+        }
+        Ok(())
     }
 
     pub async fn retain_expired_segments(&self, rolling_buffer_seconds: u64) {

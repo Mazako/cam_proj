@@ -38,7 +38,7 @@ async fn assembles_a_clip_from_in_memory_rtsp_segments() {
         .register_segment("front-door".to_owned(), first.0.clone(), first.1, first.2)
         .expect("first segment should register");
     clip_manager
-        .add_clip(
+        .add_or_extend_clip(
             "front-door".to_owned(),
             first.1,
             Duration::ZERO,

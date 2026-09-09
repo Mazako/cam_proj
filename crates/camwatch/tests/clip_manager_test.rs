@@ -17,7 +17,7 @@ async fn keeps_segments_until_the_clip_job_is_dropped() {
     let pre_event = register_segment(&manager, &directory, "pre-event.mp4", 90, 95);
 
     manager
-        .add_clip(
+        .add_or_extend_clip(
             CAMERA_ID.to_owned(),
             at(100),
             Duration::from_secs(10),
@@ -27,7 +27,6 @@ async fn keeps_segments_until_the_clip_job_is_dropped() {
     let post_event = register_segment(&manager, &directory, "post-event.mp4", 100, 110);
     let job = receiver.try_recv().expect("clip job should be queued");
 
-    assert!(!manager.is_camera_recording(CAMERA_ID));
     assert_eq!(paths(&job), vec![pre_event.clone(), post_event.clone()]);
 
     manager.retain_expired_segments(0).await;
@@ -47,7 +46,7 @@ async fn keeps_shared_segments_until_every_clip_job_is_dropped() {
     let shared = register_segment(&manager, &directory, "shared.mp4", 100, 105);
 
     manager
-        .add_clip(
+        .add_or_extend_clip(
             CAMERA_ID.to_owned(),
             at(100),
             Duration::ZERO,
@@ -60,7 +59,7 @@ async fn keeps_shared_segments_until_every_clip_job_is_dropped() {
         .expect("first clip job should be queued");
 
     manager
-        .add_clip(
+        .add_or_extend_clip(
             CAMERA_ID.to_owned(),
             at(105),
             Duration::from_secs(5),
@@ -91,7 +90,7 @@ async fn releases_segments_when_the_clip_worker_is_unavailable() {
     drop(receiver);
 
     manager
-        .add_clip(
+        .add_or_extend_clip(
             CAMERA_ID.to_owned(),
             at(100),
             Duration::ZERO,
@@ -100,7 +99,6 @@ async fn releases_segments_when_the_clip_worker_is_unavailable() {
         .expect("clip should start");
     let segment = register_segment(&manager, &directory, "worker-unavailable.mp4", 100, 110);
 
-    assert!(!manager.is_camera_recording(CAMERA_ID));
     manager.retain_expired_segments(0).await;
     assert!(!segment.exists());
 }

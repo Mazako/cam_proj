@@ -114,6 +114,16 @@ where
                 );
             }
             CameraStreamStatus::Offline { .. } => {
+                if self
+                    .clip_manager
+                    .save_if_has_clip(self.camera_config.id.as_str())
+                    .is_err()
+                {
+                    tracing::warn!(
+                        camera_id = self.camera_config.id.as_str(),
+                        "failed to save clip before camera went offline"
+                    );
+                }
                 tracing::warn!(
                     camera_id = self.camera_config.id.as_str(),
                     "camera stream is offline"
@@ -123,20 +133,13 @@ where
     }
 
     fn handle_frame_event(&mut self, frame: Frame) {
-        if self
-            .clip_manager
-            .is_camera_recording(self.camera_config.id.as_str())
-        {
-            return;
-        }
-
         let clip_triggered = if self.camera_config.clip_after_motion {
             self.is_motion_detected(&frame)
         } else {
             self.is_motion_detected(&frame) && self.is_yolo_motion_detected(&frame)
         };
         if clip_triggered
-            && let Err(error) = self.clip_manager.add_clip(
+            && let Err(error) = self.clip_manager.add_or_extend_clip(
                 self.camera_config.id.as_str().to_owned(),
                 frame.captured_at,
                 Duration::from_secs(self.pre_event_seconds),

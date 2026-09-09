@@ -66,4 +66,12 @@ impl ActiveClip {
             segments: self.segments,
         }
     }
+
+    pub(super) fn extend(&mut self, new_ended_at: SystemTime) {
+        self.ended_at = new_ended_at;
+    }
+
+    pub(super) fn has_segments(&self) -> bool {
+        !self.segments.is_empty()
+    }
 }
