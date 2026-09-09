@@ -68,9 +68,10 @@ impl ActiveClip {
     }
 
     pub(super) fn extend(&mut self, new_ended_at: SystemTime) {
-        self.ended_at = new_ended_at;
+        let max_ended_at = self.started_at + Duration::from_mins(2);
+        self.ended_at = self.ended_at.max(new_ended_at.min(max_ended_at));
     }
-
+    
     pub(super) fn has_segments(&self) -> bool {
         !self.segments.is_empty()
     }
