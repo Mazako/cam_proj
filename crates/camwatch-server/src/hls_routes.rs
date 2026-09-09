@@ -36,8 +36,13 @@ async fn serve_file(
     file_name: &str,
     content_type: &str,
 ) -> Response {
-    let Some(directory) = hls_directory(state, camera_id) else {
-        return StatusCode::NOT_FOUND.into_response();
+    let directory = match hls_directory(state, camera_id).await {
+        Ok(Some(directory)) => directory,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(error) => {
+            tracing::error!(camera_id, %error, "HLS camera lookup failed");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
     };
     let path = directory.join(file_name);
 
@@ -56,14 +61,20 @@ async fn serve_file(
     }
 }
 
-fn hls_directory(state: &AppState, camera_id: &str) -> Option<PathBuf> {
-    CameraId::parse(camera_id.to_owned()).ok()?;
-    state
-        .camera_runtimes
-        .get(camera_id)?
-        .is_running()
-        .then_some(())?;
-    Some(state.runtime_config.hls_directory.join(camera_id))
+async fn hls_directory(
+    state: &AppState,
+    camera_id: &str,
+) -> Result<Option<PathBuf>, camwatch::storage::StorageError> {
+    if CameraId::parse(camera_id.to_owned()).is_err() {
+        return Ok(None);
+    }
+    let Some(camera) = state.database.get_camera(camera_id).await? else {
+        return Ok(None);
+    };
+    if !camera.enabled || camera.deleted_at.is_some() {
+        return Ok(None);
+    }
+    Ok(Some(state.runtime_config.hls_directory.join(camera_id)))
 }
 
 fn is_safe_segment_name(value: &str) -> bool {
